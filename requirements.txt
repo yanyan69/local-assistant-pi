@@ -1,0 +1,9 @@
+# sudo apt update && sudo apt install -y build-essential cmake python3-dev  libopenblas-dev gfortran
+
+# sudo apt update && sudo apt install -y python3-venv python3-full
+
+# python3 -m venv myenv
+# source myenv/bin/activate
+
+# pip install llama-cpp-python flask modelscope
+# pip install langchain-community langchain-text-splitters sentence-transformers chromadb pypdf
