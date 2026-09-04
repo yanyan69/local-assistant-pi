@@ -1,0 +1,7 @@
+# Enforce LF line endings for shell scripts and python
+*.sh text eol=lf
+*.py text eol=lf
+.gitignore text eol=lf
+
+# Default behavior for other text files
+* text=auto
