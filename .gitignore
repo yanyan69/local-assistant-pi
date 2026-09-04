@@ -2,4 +2,5 @@ my_source_files/
 __pycache__/
 server-files-draft/
 
-Llama-3.2-1B-Instruct.Q4_K_M.ggufmyenv/
+*.gguf
+Llama-3.2-1B-Instruct.Q4_K_M.ggufmyenv
