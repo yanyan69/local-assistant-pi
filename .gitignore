@@ -4,3 +4,6 @@ server-files-draft/
 
 *.gguf
 Llama-3.2-1B-Instruct.Q4_K_M.ggufmyenv
+.claudeignore
+knowledge_base/
+.continue/
