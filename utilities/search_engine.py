@@ -11,7 +11,7 @@ class OfflineSearchEngine:
     def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
 
-    def query(self, query_str: str, top_k: int = 2) -> str:
+    def query(self, query_str: str, top_k: int = 2, category: str = None) -> str:
         """Queries SQLite FTS5 index directly for BM25 match scores."""
         if not os.path.exists(self.db_path):
             return "No local document records available."
@@ -42,17 +42,20 @@ class OfflineSearchEngine:
                 if not cursor.fetchone():
                     return "Search index not initialized."
 
-                cursor.execute("""
+                category_filter = " AND category = ?" if category else ""
+                sql = f"""
                     SELECT 
                         filename,
                         category,
                         content,
                         bm25(paragraphs_fts) AS score
                     FROM paragraphs_fts
-                    WHERE paragraphs_fts MATCH ?
+                    WHERE paragraphs_fts MATCH ?{category_filter}
                     ORDER BY score ASC
                     LIMIT ?
-                """, (fts_query, top_k))
+                """
+                params = (fts_query, category, top_k) if category else (fts_query, top_k)
+                cursor.execute(sql, params)
 
                 rows = cursor.fetchall()
                 if not rows:

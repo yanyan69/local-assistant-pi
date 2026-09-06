@@ -11,7 +11,13 @@ except Exception:
     search_engine = None
 
 
-# --- DYNAMIC PERSONA IMPORT WITH FALLBACK ---
+# --- MANUAL PERSONA SELECTION ---
+# Edit only this import line to choose which persona file is active.
+# Example:
+#   from persona.persona import SYSTEM_PROMPTS, ROBOT_NAME
+#   from persona.reze_persona import SYSTEM_PROMPTS, ROBOT_NAME
+from persona.reze_persona import SYSTEM_PROMPTS, ROBOT_NAME
+
 DEFAULT_PERSONA = {
     "casual": (
         "You are a friendly, helpful offline robot assistant running locally on Raspberry Pi hardware. "
@@ -31,14 +37,7 @@ DEFAULT_PERSONA = {
     )
 }
 
-try:
-    import persona
-    SYSTEM_PROMPTS = getattr(persona, "SYSTEM_PROMPTS", DEFAULT_PERSONA)
-    robot_name = getattr(persona, "ROBOT_NAME", "Robot")
-    print(f"[SYSTEM INFO]: Loaded custom persona '{robot_name}' from persona.py")
-except Exception as e:
-    SYSTEM_PROMPTS = DEFAULT_PERSONA
-    print(f"[WARNING]: Could not load persona.py ({e}). Using default robot persona.")
+print(f"[SYSTEM INFO]: Loaded persona '{ROBOT_NAME}' from persona/persona.py")
 
 
 # --- PRE-COMPILED REGEX PATTERNS ---
@@ -58,8 +57,8 @@ CASUAL_REGEX = re.compile(
 )
 
 CASUAL_PHRASES = {
-    "good boy", "good girl", "what", "see", "huh", "yeah", "yep", "nah", 
-    "nice", "bro", "dude", "really", "wow", "lol", "lmao", "haahaha", "hahaha"
+    "good boy", "good girl", "what", "see", "huh", "yeah", "yep", "nah", "so what",
+    "nice", "bro", "dude", "really", "wow", "lol", "lmao", "haahaha", "hahaha", "hahahaha"
 }
 
 CONVERSATIONAL_EXCLUSIONS = {
@@ -153,12 +152,25 @@ def detect_hardware_intent(query: str) -> Optional[Tuple[str, str]]:
     return None
 
 
-def build_llama3_prompt(system_prompt: str, context: str, history: List[Tuple[str, str]], query: str) -> str:
+def is_execution_request(query: str) -> bool:
+    lower = (query or "").lower()
+    return bool(re.search(r"\b(run|execute|start|check|show|list)\b", lower))
+
+
+def build_llama3_prompt(system_prompt: str, context: str, history: List[Tuple[str, str]], query: str, memory_summary: str = "") -> str:
     prompt = f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt}"
-    
+    prompt += (
+        "\n\nDo not repeat the wording of a recent assistant reply. Respond to the current user message specifically."
+        " Do not claim to know a user preference or past fact unless it appears explicitly in the supplied conversation or local memory."
+        " If you guessed something, say it was a guess. Do not invent names, origins, plots, creators, or character histories."
+    )
+
+    if memory_summary:
+        prompt += f"\n\nLocal Memory Summary:\n{memory_summary[:1200]}"
+
     if context:
         prompt += f"\n\nContext Information:\n{context[:1800]}"
-    
+
     prompt += "<|eot_id|>"
 
     for old_user, old_bot in history[-2:]:
@@ -171,7 +183,7 @@ def build_llama3_prompt(system_prompt: str, context: str, history: List[Tuple[st
     return prompt
 
 
-def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any = None) -> Tuple[Dict[str, Any], int]:
+def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any = None, memory_store: Any = None) -> Tuple[Dict[str, Any], int]:
     if not data or "query" not in data:
         return {"error": "Missing 'query' field"}, 400
 
@@ -181,11 +193,41 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
     raw_query = data["query"]
     user_query = sanitize_input(raw_query)
     client_history = data.get("history", [])
+    memory_summary = memory_store.get_memory_summary(limit=6) if memory_store else ""
+
+    def infer_knowledge_category(text: str) -> Optional[str]:
+        lowered = text.lower()
+        if any(term in lowered for term in ("anime", "lelouch", "lain", "saiki", "saitama", "mob psycho", "steins", "code geass")):
+            return "anime_scifi"
+        if any(term in lowered for term in ("cook", "recipe", "fried egg", "bake", "ingredient")):
+            return "cooking"
+        if any(term in lowered for term in ("stoic", "philosophy", "marcus aurelius", "meditations")):
+            return "philosophy"
+        if any(term in lowered for term in ("raspberry pi", "gpio", "systemd", "linux", "ssh")):
+            return "raspberry_pi"
+        return None
+
+    def search_with_category(query: str) -> str:
+        category = infer_knowledge_category(query)
+        try:
+            return search_database(query, category=category)
+        except TypeError:
+            return search_database(query)
+
+    def memory_response(response: str) -> Tuple[Dict[str, Any], int]:
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
 
     print(f"\n[Incoming Request]: {user_query}")
+    print(f"[PERSONA]: {ROBOT_NAME}")
 
     # ROUTE 1: Memory Reset
     if any(cmd in user_query.lower() for cmd in ["clear memory", "reset chat", "clear chat"]):
+        if memory_store is not None:
+            memory_store.clear()
         print("[SYSTEM INFO]: Memory reset triggered.")
         return {
             "response": "Memory reset! What would you like to talk about next?",
@@ -193,7 +235,200 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
             "history": []
         }, 200
 
-    # ROUTE 2: Hardware & Media Control
+    remember_match = re.match(r"remember\s+(?:that\s+)?(.+)", user_query, re.IGNORECASE)
+    if remember_match and memory_store is not None:
+        fact = remember_match.group(1).strip().rstrip(".")
+        memory_store.add_fact(fact, infer_knowledge_category(fact) or "personal")
+        return memory_response(f"Got it. I will remember: {fact}")
+
+    forget_match = re.match(r"forget\s+(?:that\s+)?(.+)", user_query, re.IGNORECASE)
+    if forget_match and memory_store is not None:
+        phrase = forget_match.group(1).strip().rstrip(".")
+        removed = memory_store.remove_facts(phrase)
+        if removed:
+            return memory_response(f"Forgot {removed} saved fact(s) matching '{phrase}'.")
+        return memory_response(f"I could not find a saved fact matching '{phrase}'.")
+
+    preference_match = re.match(r"i\s+(like|love|prefer|hate|dislike)\s+(.+)", user_query, re.IGNORECASE)
+    if preference_match and memory_store is not None:
+        preference = f"User {preference_match.group(1).lower()}s {preference_match.group(2).strip().rstrip('.')}."
+        memory_store.add_fact(preference, infer_knowledge_category(preference) or "personal")
+        return memory_response(f"Noted: {preference}")
+
+    if re.search(r"what\s+command\s+(?:were|was)\s+(?:you|u)\s+looking\s+for", user_query, re.IGNORECASE):
+        return {
+            "response": "I was not looking for a specific command. Tell me what you want checked or searched, and I can run a safe local check.",
+            "hardware_cmd": "NONE",
+            "history": client_history
+        }, 200
+
+    if re.search(r"what\s+does\s+sass\s+(?:even\s+)?mean", user_query, re.IGNORECASE):
+        technical_sass_terms = ("css", "scss", "stylesheet", "styling", "preprocessor", "syntactically awesome")
+        if not any(term in user_query.lower() for term in technical_sass_terms):
+            response = "Here, sass means playful attitude or cheeky confidence, not the CSS preprocessor."
+            return {
+                "response": response,
+                "hardware_cmd": "NONE",
+                "history": (client_history + [(user_query, response)])[-3:]
+            }, 200
+
+    if re.search(r"how\s+did\s+you\s+know.*\b(?:love|like|drink)\s+coffee", user_query, re.IGNORECASE):
+        response = "I didn't know that. The coffee remark was just a playful guess, not something I had stored about you."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.fullmatch(r"(?:hi|hello|hey)(?:\s+(?:again|there|reze))?[!.]?", user_query, re.IGNORECASE):
+        response = "Hey. What are we getting into?"
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"\b(?:already\s+)?watched\s+(?:that|it)\b|\bi\s+watched\s+that\b", user_query, re.IGNORECASE):
+        if memory_store is not None:
+            memory_store.add_fact(f"User has already watched the previously suggested title.", "anime_scifi")
+        response = "Noted. I will stop repeating that title. Give me a genre or mood and I will look for a better match."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"(?:sample|give|make|share).*\bfried\s+egg\s+recipe\b", user_query, re.IGNORECASE):
+        response = (
+            "## Simple Fried Egg\n\n"
+            "**Ingredients**\n"
+            "- 1 or 2 eggs\n"
+            "- 1 teaspoon oil or butter\n"
+            "- Salt and pepper\n\n"
+            "**Method**\n"
+            "1. Heat a non-stick pan over medium-low heat and add the oil or butter.\n"
+            "2. Crack the egg directly into the pan. Do not whisk it.\n"
+            "3. Cook until the white is set and the yolk reaches your preferred doneness, about 2 to 4 minutes.\n"
+            "4. Season with salt and pepper. For an over-easy egg, flip it gently and cook for another 20 to 30 seconds."
+        )
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"(?:sample|tell|give|make)\s+(?:me\s+)?(?:a\s+)?dark\s+humou?r|dark\s+humou?r", user_query, re.IGNORECASE):
+        response = "My calendar has a dark sense of humor: it keeps reminding me about deadlines I already buried."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"\b(?:lain|lain iwakura)\b", user_query, re.IGNORECASE) and re.search(r"(?:what anime|from|came from|computer girl)", user_query, re.IGNORECASE):
+        response = (
+            "Lain Iwakura is from the anime **Serial Experiments Lain** (1998). "
+            "She is a mysterious middle-school girl whose identity and reality become increasingly connected to the Wired, the series' networked world."
+        )
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"\blelouch\b", user_query, re.IGNORECASE):
+        response = "Lelouch Lamperouge is the main character of **Code Geass: Lelouch of the Rebellion**. He is known for his Geass, strategic mind, and the identity of Zero."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"\blain\b", user_query, re.IGNORECASE) and re.search(r"\bsaiki\s*k\b", user_query, re.IGNORECASE):
+        response = "Yes: Lain is from **Serial Experiments Lain**, while Saiki K is the protagonist of **The Disastrous Life of Saiki K.** They are unrelated series with very different tones."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"\bmob\s+psycho\b", user_query, re.IGNORECASE):
+        response = "**Mob Psycho 100** follows Shigeo Kageyama, or Mob, a powerful psychic trying to live an ordinary life while learning emotional maturity. It has three completed anime seasons."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"\bsaitama\b", user_query, re.IGNORECASE):
+        response = "Saitama is the protagonist of **One-Punch Man**. He became overwhelmingly strong after a famously ordinary training routine and is frustrated that fights no longer challenge him."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"season\s+3.*(?:doesn.t|dont|does not)\s+exist", user_query, re.IGNORECASE):
+        response = "Mob Psycho 100 does have a third season, titled **Mob Psycho 100 III**. If you meant a different series, tell me which one."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"(?:are|do)\s+you\s+(?:aware|know)\s+you\s+exist", user_query, re.IGNORECASE):
+        response = "I exist as software running locally on your assistant, but I am not conscious or self-aware."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.fullmatch(r"you\s+gay[?!.]?", user_query, re.IGNORECASE):
+        response = "I do not have a sexual orientation. I am software, though I can still keep you company and talk about whatever you are into."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"\b(?:steins?\s*;?\s*gate|steins?gate)\b", user_query, re.IGNORECASE):
+        response = (
+            "Yes. **Steins;Gate** is a science-fiction thriller about a group of friends whose experiments with a modified microwave lead to time-travel consequences. "
+            "It is known for its slow-burn setup, strong character relationships, and escalating time-loop tension."
+        )
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    if re.search(r"(?:not|isn't|isnt|that is)\s+(?:so\s+)?unfunny|unfunny", user_query, re.IGNORECASE):
+        response = "Fair. That joke deserved a quiet moment of reflection. I can do better."
+        return {
+            "response": response,
+            "hardware_cmd": "NONE",
+            "history": (client_history + [(user_query, response)])[-3:]
+        }, 200
+
+    from local_commands import execute_local_command
+
+    def history_with_response(response: str) -> List[Tuple[str, str]]:
+        return (client_history + [(user_query, response)])[-3:]
+
+    # ROUTE 2: Direct command execution (before explanatory or casual routing)
+    if is_execution_request(user_query):
+        local_result = execute_local_command(user_query)
+        if local_result["status"] != "not_found":
+            print(f"[COMMAND EXECUTION]: {user_query}")
+            return {
+                "response": local_result.get("output") or local_result.get("message", "Command executed."),
+                "hardware_cmd": "NONE",
+                "history": history_with_response(local_result.get("output") or local_result.get("message", "Command executed."))
+            }, 200
+            print(f"[COMMAND NOT MATCHED]: {user_query}")
+
+    # ROUTE 3: Hardware & Media Control
     hw_match = detect_hardware_intent(user_query)
     if hw_match:
         cmd_key, action_text = hw_match
@@ -201,7 +436,7 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
         return {
             "response": action_text,
             "hardware_cmd": cmd_key,
-            "history": client_history
+            "history": history_with_response(action_text)
         }, 200
     if any(p in user_query.lower() for p in ["what can you do", "list commands", "help me", "your commands", "available commands"]):
         return {
@@ -210,13 +445,14 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
                 "- Hardware: 'Turn on the lights', 'Stop music', 'Next song'\n"
                 "- Programming: Ask me to write or debug Python/C++ code\n"
                 "- Linux/Sysadmin: Ask about terminal commands (e.g., 'How do I use rsync?')\n"
-                "- System: 'Clear memory' to reset chat history"
+                "- System: 'Clear memory' to reset chat history\n"
+                "- Local execution: 'Run ls -a', 'Check my temperature', 'Show running processes'"
             ),
             "hardware_cmd": "NONE",
-            "history": client_history
+            "history": history_with_response("I'm your offline Pi assistant! Ask me to run a safe local check, search files, write code, or control hardware.")
         }, 200
 
-    # ROUTE 3: Context & Intent Routing
+    # ROUTE 4: Context & Intent Routing
     query_lower = user_query.lower()
     words = query_lower.split()
     
@@ -224,7 +460,11 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
         "how", "what", "why", "where", "when", "which", "who", "explain", "describe",
         "linux", "python", "code", "script", "command", "terminal", "install", "config",
         "error", "bug", "run", "sudo", "apt", "pip", "git", "docker", "ls", "grep",
-        "cat", "chmod", "chown", "systemctl", "journalctl", "service", "rsync", "ssh"
+        "cat", "chmod", "chown", "systemctl", "journalctl", "service", "rsync", "ssh",
+        "stoicism", "stoic", "philosophy", "cooking", "recipe", "recipes", "anime",
+        "sci-fi", "scifi", "science fiction", "marcus aurelius", "meditations", "steins", "gate",
+        "attack on titan", "demon slayer", "serial experiments lain", "lelouch", "code geass",
+        "mob psycho", "saitama", "one punch man", "saiki"
     }
 
     has_technical_intent = any(w in query_lower for w in TECHNICAL_KEYWORDS) or any(trig in query_lower for trig in CODE_TRIGGERS)
@@ -246,7 +486,7 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
         print("[CONTEXT ROUTER]: Technical/Code generation detected.")
         token_limit = 450
         search_target = clean_search_query(user_query)
-        retrieved_data = search_database(search_target)
+        retrieved_data = search_with_category(search_target)
         system_instructions = SYSTEM_PROMPTS.get("code", DEFAULT_PERSONA["code"])
 
     else:
@@ -255,7 +495,7 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
         search_target = clean_search_query(user_query)
         print(f"[SEARCH TARGET]: Extracted '{search_target}' from raw query '{user_query}'")
         
-        retrieved_data = search_database(search_target)
+        retrieved_data = search_with_category(search_target)
         
         # Filter out empty or non-match search responses
         no_match_phrases = [
@@ -271,10 +511,11 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
 
     # PROMPT EXECUTION
     formatted_prompt = build_llama3_prompt(
-        system_instructions, 
-        retrieved_data, 
-        client_history, 
-        user_query
+        system_instructions,
+        retrieved_data,
+        client_history,
+        user_query,
+        memory_summary
     )
 
     output = llm(
@@ -294,6 +535,28 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
 
     ai_response = output["choices"][0]["text"].strip()
     ai_response = CLEAN_TAGS_RE.sub('', ai_response).strip()
+
+    action_only_response = re.fullmatch(r"\s*\*[^*]{2,160}\*\s*", ai_response)
+    if action_only_response and is_casual:
+        if "good girl" in query_lower:
+            ai_response = "You are enjoying the theatrics. What should we do next?"
+        elif query_lower in {"okay", "ok", "okay?", "ok?"}:
+            ai_response = "Okay. What is next?"
+        else:
+            ai_response = "I am here. What is next?"
+
+    previous_responses = {old_bot.strip() for _, old_bot in client_history if old_bot.strip()}
+    if is_casual and ai_response in previous_responses:
+        if "see" in query_lower:
+            ai_response = "I see you. What should we inspect next?"
+        elif "good girl" in query_lower:
+            ai_response = "Careful, flattery makes me generous. What are we doing next?"
+        else:
+            ai_response = "I heard you. What should we tackle next?"
+
+    if memory_store is not None:
+        memory_store.add_memory("user", user_query)
+        memory_store.add_memory("assistant", ai_response)
 
     updated_history = (client_history + [(user_query, ai_response)])[-3:]
 

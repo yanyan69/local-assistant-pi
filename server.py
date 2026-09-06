@@ -5,6 +5,8 @@ import sqlite3
 import re
 import json
 import asyncio
+import shlex
+import subprocess
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager, contextmanager
 
@@ -18,14 +20,37 @@ os.environ["LLAMA_LOG_LEVEL"] = "ERROR"
 from llama_cpp import Llama
 from web_ui import get_chat_html
 from robot import process_robot_request
+from app_config import build_runtime_config
+from local_memory import LocalMemoryStore
 
 
 MODEL_PATH = "./Llama-3.2-1B-Instruct.Q4_K_M.gguf"
 DB_PATH = "knowledge_base.db"
+RUNTIME_CONFIG = build_runtime_config(os.getenv("LOCAL_ASSISTANT_MODE", "balanced"))
 
 # Global references
 llm: Llama = None
 llm_lock = asyncio.Lock()
+memory_store = LocalMemoryStore(RUNTIME_CONFIG["memory_db_path"])
+
+
+def is_allowed_command(command: str) -> bool:
+    safe_cmd = (command or "").strip()
+    if not safe_cmd:
+        return False
+
+    if any(token in safe_cmd for token in [";", "&&", "||", "|", ">", "<", "\n", "\r"]):
+        return False
+
+    try:
+        parsed = shlex.split(safe_cmd)
+    except ValueError:
+        return False
+    if not parsed or parsed[0].lower() in {"sudo", "rm", "mv", "cp", "chmod", "chown", "shutdown", "reboot", "poweroff"}:
+        return False
+
+    allowlist = RUNTIME_CONFIG["automation_allowlist"]
+    return any(safe_cmd == allowed or safe_cmd.startswith(f"{allowed} ") for allowed in allowlist)
 
 
 # --- SILENCE C-LEVEL OUTPUT ---
@@ -112,7 +137,7 @@ def init_fts5_index():
         print(f"[CRITICAL INDEX ERROR]: {e}")
 
 
-def search_database(query: str, max_results: int = 4) -> str:
+def search_database(query: str, max_results: int = 4, category: str = None) -> str:
     """Executes zero-RAM native C-level BM25 search via SQLite FTS5."""
     if not os.path.exists(DB_PATH):
         return "No local document records available."
@@ -133,7 +158,8 @@ def search_database(query: str, max_results: int = 4) -> str:
         with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True) as conn:
             cursor = conn.cursor()
 
-            cursor.execute("""
+            category_filter = " AND category = ?" if category else ""
+            sql = f"""
                 SELECT 
                     filename,
                     filepath,
@@ -142,10 +168,12 @@ def search_database(query: str, max_results: int = 4) -> str:
                     content,
                     bm25(paragraphs_fts) AS rank
                 FROM paragraphs_fts
-                WHERE paragraphs_fts MATCH ?
+                WHERE paragraphs_fts MATCH ?{category_filter}
                 ORDER BY rank ASC
                 LIMIT ?
-            """, (fts_match_query, max_results))
+            """
+            params = (fts_match_query, category, max_results) if category else (fts_match_query, max_results)
+            cursor.execute(sql, params)
 
             rows = cursor.fetchall()
 
@@ -178,15 +206,16 @@ def search_database(query: str, max_results: int = 4) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global llm
-    print("[SYSTEM INFO]: Initializing Llama 3.2 engine safely on Raspberry Pi 5...")
-    
+    print(f"[SYSTEM INFO]: Initializing local assistant with mode='{RUNTIME_CONFIG['mode']}' on Raspberry Pi 5...")
+    print(f"[SYSTEM INFO]: Runtime config -> threads={RUNTIME_CONFIG['n_threads']}, batch={RUNTIME_CONFIG['n_batch']}, ctx={RUNTIME_CONFIG['n_ctx']}")
+
     with silence_all_output():
         llm = Llama(
             model_path=MODEL_PATH,
-            n_ctx=2048,
-            n_threads=4,       # Pi 5 Quad-core ARM Cortex-A76
-            n_batch=512,       # Increased from 128 to 512 for faster prompt evaluation
-            flash_attn=True,   # Speed up prompt evaluation and save RAM
+            n_ctx=RUNTIME_CONFIG["n_ctx"],
+            n_threads=RUNTIME_CONFIG["n_threads"],
+            n_batch=RUNTIME_CONFIG["n_batch"],
+            flash_attn=RUNTIME_CONFIG["flash_attn"],
             verbose=False,
             loghandler=None
         )
@@ -200,9 +229,11 @@ async def lifespan(app: FastAPI):
 
     print("[SYSTEM INFO]: Llama 3.2 engine active and ready.")
     init_fts5_index()
-    
+    memory_store.clear() if not os.path.exists(RUNTIME_CONFIG["memory_db_path"]) else None
+    print(f"[SYSTEM INFO]: Local memory store ready at {RUNTIME_CONFIG['memory_db_path']}")
+
     yield
-    
+
     print("[SYSTEM INFO]: Shutting down system.")
 
 
@@ -215,6 +246,19 @@ async def render_browser_interface():
     return HTMLResponse(content=get_chat_html())
 
 
+@app.get("/api/status")
+async def status_endpoint():
+    return {
+        "status": "ready" if llm is not None else "starting",
+        "mode": RUNTIME_CONFIG["mode"],
+        "platform": RUNTIME_CONFIG["platform"],
+        "raspberry_pi": RUNTIME_CONFIG["is_raspberry_pi"],
+        "safe_execution": RUNTIME_CONFIG["safe_execution"],
+        "threads": RUNTIME_CONFIG["n_threads"],
+        "context": RUNTIME_CONFIG["n_ctx"],
+    }
+
+
 @app.post("/api/robot")
 async def robot_endpoint(request: Request):
     data = await request.json()
@@ -222,28 +266,62 @@ async def robot_endpoint(request: Request):
     async def event_stream() -> AsyncGenerator[str, None]:
         async with llm_lock:
             loop = asyncio.get_running_loop()
-            
-            # process_robot_request returns a tuple: (result_dict, status_code)
+
             result_dict, status_code = await loop.run_in_executor(
-                None, 
-                process_robot_request, 
-                data, 
-                llm, 
-                search_database
+                None,
+                process_robot_request,
+                data,
+                llm,
+                search_database,
+                memory_store
             )
-            
-            # Unpack result_dict so history, response, and hardware_cmd are at the top level
+
             payload = {
                 "response": result_dict.get("response", ""),
                 "hardware_cmd": result_dict.get("hardware_cmd", "NONE"),
                 "history": result_dict.get("history", []),
                 "status": status_code
             }
-            
+
             yield f"data: {json.dumps(payload)}\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
+
+@app.post("/api/automation")
+async def automation_endpoint(request: Request):
+    data = await request.json()
+    command = (data.get("command") or "").strip()
+
+    if not command:
+        return {"status": "error", "message": "No command supplied."}
+
+    if not is_allowed_command(command):
+        return {
+            "status": "blocked",
+            "message": "This command is not allowed in safe local mode. Use an allowlisted command only."
+        }
+
+    try:
+        proc = subprocess.run(
+            shlex.split(command),
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        response = {
+            "status": "ok" if proc.returncode == 0 else "error",
+            "code": proc.returncode,
+            "stdout": proc.stdout.strip(),
+            "stderr": proc.stderr.strip(),
+        }
+        return response
+    except FileNotFoundError:
+        return {"status": "error", "message": "Command not found on this system."}
+    except subprocess.TimeoutExpired:
+        return {"status": "error", "message": "Command timed out after 15 seconds."}
+
+
 if __name__ == "__main__":
-    # Direct app execution to prevent module loader errors
     uvicorn.run(app, host="0.0.0.0", port=5000, workers=1)
