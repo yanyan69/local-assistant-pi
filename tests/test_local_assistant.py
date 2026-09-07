@@ -1,18 +1,201 @@
 import unittest
+import tempfile
+from pathlib import Path
 
-from app_config import build_runtime_config
-from local_commands import detect_local_command_query
-from local_memory import LocalMemoryStore
+import core.app_config as app_config
+from core.app_config import build_runtime_config
+from core.local_commands import detect_local_command_query
+from core.local_memory import LocalMemoryStore
+from core.tools import execute_tool
 from robot import process_robot_request
+from core.system_context import read_system_context
+from robot import build_llama3_prompt, clean_model_response
 
 
 class LocalAssistantConfigurationTests(unittest.TestCase):
+    def test_settings_persist_and_force_proactive_interval_to_sixty_seconds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original_path = app_config.SETTINGS_PATH
+            app_config.SETTINGS_PATH = Path(directory) / "settings.json"
+            try:
+                saved = app_config.save_settings({"proactive_mode": True, "proactive_interval_seconds": 5})
+                loaded = app_config.load_settings()
+                self.assertTrue(saved["proactive_mode"])
+                self.assertEqual(loaded["proactive_interval_seconds"], 60)
+            finally:
+                app_config.SETTINGS_PATH = original_path
+
+    def test_awareness_off_does_not_read_system_context(self):
+        context = read_system_context({"system_awareness": "off", "power_saving_mode": True})
+        self.assertEqual(context, {"power_saving_mode": True})
+
+    def test_prompt_includes_approved_system_context(self):
+        prompt = build_llama3_prompt(
+            "You are local.",
+            "",
+            [],
+            "What time is it?",
+            system_context={"local_time": "03:04", "power_saving_mode": True},
+        )
+        self.assertIn("Approved Local System Context", prompt)
+        self.assertIn("03:04", prompt)
+
+    def test_time_question_uses_approved_local_clock(self):
+        def unexpected_llm(*args, **kwargs):
+            raise AssertionError("time lookup should not call the LLM")
+
+        response, status = process_robot_request(
+            {"query": "what is the time?", "history": [], "system_context": {"local_time": "03:04"}},
+            unexpected_llm,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(response["response"], "It is 03:04 locally.")
+
+    def test_check_time_uses_local_clock_before_command_routing(self):
+        response, status = process_robot_request(
+            {"query": "check the time", "history": [], "system_context": {"local_time": "12:49"}},
+            None,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(response["response"], "It is 12:49 locally.")
+
+    def test_personal_feelings_question_is_not_sent_to_rag(self):
+        def unexpected_llm(*args, **kwargs):
+            raise AssertionError("personal feelings question should not call the LLM")
+
+        response, status = process_robot_request(
+            {"query": "what do you feel about me?", "history": []},
+            unexpected_llm,
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("do not have human feelings", response["response"])
+
+    def test_personal_thoughts_question_is_not_sent_to_rag(self):
+        response, status = process_robot_request(
+            {"query": "explain your thoughts about me", "history": []},
+            None,
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("do not have human feelings", response["response"])
+
+    def test_vague_code_request_asks_for_requirements(self):
+        response, status = process_robot_request({"query": "sample me a code", "history": []}, None)
+        self.assertEqual(status, 200)
+        self.assertIn("which language", response["response"])
+
+    def test_insult_gets_a_grounded_repair_response(self):
+        response, status = process_robot_request({"query": "you sound stupid", "history": []}, None)
+        self.assertEqual(status, 200)
+        self.assertIn("missed the mark", response["response"])
+
+    def test_markdown_language_fence_is_normalized(self):
+        cleaned = clean_model_response("```markdown\nconst answer = 1;\n```")
+        self.assertTrue(cleaned.startswith("```\n"))
+
+    def test_miss_me_question_is_grounded(self):
+        response, status = process_robot_request({"query": "you miss me?", "history": []}, None)
+        self.assertEqual(status, 200)
+        self.assertIn("do not miss people", response["response"])
+
+    def test_correction_is_acknowledged_without_llm(self):
+        response, status = process_robot_request({"query": "i didnt say that", "history": []}, None)
+        self.assertEqual(status, 200)
+        self.assertIn("misunderstood", response["response"])
+
+    def test_bare_linux_query_does_not_invent_a_command(self):
+        response, status = process_robot_request({"query": "linux", "history": []}, None)
+        self.assertEqual(status, 200)
+        self.assertIn("Linux is broad", response["response"])
+        self.assertNotIn("sudo apt", response["response"])
+
+    def test_vague_run_request_requires_an_exact_command(self):
+        response, status = process_robot_request({"query": "run it for me", "history": []}, None)
+        self.assertEqual(status, 200)
+        self.assertIn("exact command", response["response"])
+
+    def test_temperature_typo_is_normalized_to_local_status(self):
+        response, status = process_robot_request(
+            {"query": "cpu termp", "history": [], "system_context": {"cpu_temperature_c": 51.2}},
+            None,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(response["response"], "The CPU temperature is 51.2 C.")
+
+    def test_time_question_respects_awareness_off(self):
+        response, status = process_robot_request(
+            {"query": "what is the time?", "history": [], "system_awareness": "off"},
+            None,
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("system awareness is turned off", response["response"])
+
+    def test_light_death_is_grounded_as_death_note(self):
+        def unexpected_llm(*args, **kwargs):
+            raise AssertionError("Death Note fact should not call the LLM")
+
+        response, status = process_robot_request(
+            {"query": "what are your thoughts about Light's Death?", "history": []},
+            unexpected_llm,
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("Death Note", response["response"])
+        self.assertIn("Ryuk", response["response"])
+
+    def test_model_response_does_not_leak_internal_prompt_sections(self):
+        cleaned = clean_model_response(
+            "Local Memory Summary:\nDurable user facts:\n- User likes tea\nRecent conversation:"
+        )
+        self.assertNotIn("Local Memory Summary", cleaned)
+        self.assertNotIn("Durable user facts", cleaned)
+        self.assertIn("direct answer", cleaned)
+
     def test_build_runtime_config_defaults_to_pi_safe_settings(self):
         config = build_runtime_config()
         self.assertEqual(config["mode"], "balanced")
         self.assertLessEqual(config["n_ctx"], 4096)
         self.assertGreater(config["n_threads"], 0)
         self.assertIn("flash_attn", config)
+
+    def test_power_saving_profile_reduces_model_runtime_settings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original_path = app_config.SETTINGS_PATH
+            app_config.SETTINGS_PATH = Path(directory) / "settings.json"
+            try:
+                app_config.save_settings({"power_saving_mode": True})
+                config = build_runtime_config()
+                self.assertEqual(config["effective_mode"], "power_saving")
+                self.assertEqual(config["n_batch"], 64)
+                self.assertEqual(config["n_ctx"], 1024)
+            finally:
+                app_config.SETTINGS_PATH = original_path
+
+    def test_typed_temperature_tool_returns_structured_result(self):
+        result = execute_tool("get_temperature")
+        self.assertIn(result["status"], {"ok", "error"})
+        self.assertIn("output", result)
+
+    def test_model_stream_callback_receives_generated_tokens(self):
+        received = []
+
+        class FakeStreamingLlm:
+            def __call__(self, prompt, stream=False, **kwargs):
+                self.assertTrue(stream)
+                yield {"choices": [{"text": "streamed "}]}
+                yield {"choices": [{"text": "answer"}]}
+
+            def assertTrue(self, value):
+                if not value:
+                    raise AssertionError("stream mode was not enabled")
+
+        response, status = process_robot_request(
+            {"query": "tell me something", "history": []},
+            FakeStreamingLlm(),
+            search_database=lambda query: "",
+            stream_callback=received.append,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual("".join(received), "streamed answer")
+        self.assertIn("streamed answer", response["response"])
 
     def test_memory_store_can_persist_and_load_history(self):
         store = LocalMemoryStore(":memory:")

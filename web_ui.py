@@ -44,6 +44,7 @@ def get_chat_html():
 
             body {
                 overflow: hidden;
+                height: 100dvh;
             }
 
             .app-container {
@@ -177,6 +178,23 @@ def get_chat_html():
                 background: linear-gradient(135deg, #7c9cff, #adc2ff);
                 color: #0b1020;
                 box-shadow: var(--shadow-soft);
+                overflow: hidden;
+            }
+
+            .brand-avatar img,
+            .panel-avatar img,
+            .msg-avatar img,
+            .avatar-slot img {
+                width: 100%;
+                height: 100%;
+                max-width: 100%;
+                max-height: 100%;
+                min-width: 0;
+                min-height: 0;
+                display: block;
+                box-sizing: border-box;
+                object-fit: contain;
+                object-position: center;
             }
 
             .brand-title h1 {
@@ -505,6 +523,8 @@ def get_chat_html():
                 display: flex;
                 flex-direction: column;
                 min-width: 0;
+                min-height: 0;
+                height: 100dvh;
                 background: var(--bg-chat);
                 position: relative;
             }
@@ -518,6 +538,8 @@ def get_chat_html():
                 border-bottom: 1px solid var(--border-color);
                 background: rgba(17, 23, 34, 0.9);
                 backdrop-filter: blur(10px);
+                flex: 0 0 auto;
+                min-height: 70px;
             }
 
             .chat-header .left {
@@ -535,6 +557,7 @@ def get_chat_html():
                 background: linear-gradient(135deg, #7c9cff, #6ce3ff);
                 color: #0d1424;
                 font-weight: 700;
+                overflow: hidden;
             }
 
             .chat-header .info strong {
@@ -564,6 +587,7 @@ def get_chat_html():
 
             .chat-box {
                 flex: 1;
+                min-height: 0;
                 overflow-y: auto;
                 padding: 20px 18px 10px;
                 scroll-behavior: smooth;
@@ -604,6 +628,7 @@ def get_chat_html():
                 flex-shrink: 0;
                 color: white;
                 box-shadow: var(--shadow-soft);
+                overflow: hidden;
             }
 
             .msg-wrapper.bot .msg-avatar {
@@ -740,7 +765,50 @@ def get_chat_html():
                 padding: 14px 18px 18px;
                 background: rgba(17, 23, 34, 0.9);
                 border-top: 1px solid var(--border-color);
+                flex: 0 0 auto;
             }
+
+            .mobile-menu-btn {
+                display: none;
+                width: 36px;
+                height: 36px;
+                border: 1px solid var(--border-color);
+                border-radius: 10px;
+                background: rgba(255,255,255,0.04);
+                color: var(--text-main);
+                font-size: 18px;
+            }
+
+            .settings-modal {
+                position: fixed;
+                inset: 0;
+                z-index: 40;
+                display: grid;
+                place-items: center;
+                padding: 20px;
+                background: rgba(3, 6, 12, 0.7);
+            }
+
+            .settings-modal[hidden] { display: none; }
+
+            .settings-dialog {
+                width: min(100%, 390px);
+                display: grid;
+                gap: 16px;
+                padding: 20px;
+                border: 1px solid var(--border-color);
+                border-radius: 16px;
+                background: var(--bg-panel);
+                box-shadow: var(--shadow-soft);
+            }
+
+            .settings-dialog-header { display: flex; justify-content: space-between; align-items: center; }
+            .settings-dialog-header h2 { font-size: 18px; }
+            .settings-dialog-header button { border: 0; background: transparent; color: var(--text-main); font-size: 24px; cursor: pointer; }
+            .settings-dialog label { display: grid; gap: 7px; color: var(--text-soft); font-size: 13px; }
+            .settings-dialog select { padding: 9px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-main); }
+            .settings-dialog .setting-check { display: flex; grid-template-columns: auto 1fr; align-items: center; gap: 9px; }
+            .settings-note { color: var(--text-muted); font-size: 12px; line-height: 1.4; }
 
             .input-box-wrapper {
                 max-width: 860px;
@@ -831,26 +899,48 @@ def get_chat_html():
 
             @media (max-width: 760px) {
                 body {
-                    overflow: auto;
+                    overflow: hidden;
                 }
 
                 .app-container {
                     display: block;
-                    height: auto;
-                    min-height: 100vh;
+                    height: 100dvh;
+                    min-height: 0;
+                    position: relative;
                 }
 
                 .sidebar {
                     display: none;
+                    position: absolute;
+                    z-index: 20;
+                    top: 0;
+                    left: 0;
+                    width: min(88vw, 320px);
+                    height: 100dvh;
+                    box-shadow: 16px 0 36px rgba(0, 0, 0, 0.35);
                 }
 
+                .sidebar.mobile-open { display: flex; }
+
                 .main-content {
-                    min-height: 100vh;
+                    width: 100%;
+                    height: 100dvh;
+                    min-height: 0;
                 }
 
                 .chat-header {
                     padding: 14px 14px 12px;
+                    min-height: 64px;
                 }
+
+                .mobile-menu-btn { display: grid; place-items: center; }
+
+                .chat-header .left { min-width: 0; }
+                .chat-header .info { min-width: 0; }
+                .chat-header .info strong,
+                .chat-header .info span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+                .chat-actions .chat-pill { display: none; }
 
                 .chat-box {
                     padding: 12px 12px 8px;
@@ -866,6 +956,9 @@ def get_chat_html():
                 .input-container {
                     padding: 10px 12px 14px;
                 }
+
+                .input-box { min-height: 62px; }
+                textarea { min-width: 0; }
             }
         </style>
     </head>
@@ -873,9 +966,9 @@ def get_chat_html():
         <div class="app-container">
             <aside class="sidebar" id="sidebar">
                 <div class="brand">
-                    <div class="brand-avatar">Y</div>
+                    <div class="brand-avatar" id="brandAvatar">AI</div>
                     <div class="brand-title">
-                        <h1>Yanyan Bot</h1>
+                        <h1 id="brandName">Local Assistant</h1>
                         <div class="status"><span class="status-dot" id="statusDot"></span> <span id="statusLabel">Local AI</span></div>
                     </div>
                     <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">☰</button>
@@ -924,11 +1017,12 @@ def get_chat_html():
                     <strong>Engine:</strong> Llama 3 (Local)<br>
                     <strong>Mode:</strong> <span id="runtimeMode">Loading...</span><br>
                     <strong>Hardware:</strong> <span id="runtimeHardware">Local host</span><br>
-                    <strong>Execution:</strong> <span id="runtimeSafety">Checking...</span>
+                    <strong>Execution:</strong> <span id="runtimeSafety">Checking...</span><br>
+                    <strong>Latency:</strong> <span id="runtimeLatency">Checking...</span>
                 </div>
 
                 <div class="settings-slot">
-                    <button class="sidebar-btn settings-btn" aria-label="Settings">
+                    <button class="sidebar-btn settings-btn" onclick="openSettings()" aria-label="Settings">
                         <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m19.4 15 .1.1a2 2 0 0 1-2.8 2.8l-.1-.1a2 2 0 0 0-3.4 1.4V19a2 2 0 0 1-4 0v-.1a2 2 0 0 0-3.4-1.4l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1A2 2 0 0 0 1.6 11H1.5a2 2 0 0 1 0-4h.1A2 2 0 0 0 3 3.6l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1A2 2 0 0 0 9.2 0V0a2 2 0 0 1 4 0v.1a2 2 0 0 0 3.4 1.4l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1A2 2 0 0 0 20.8 7h.1a2 2 0 0 1 0 4h-.1a2 2 0 0 0-1.4 3.4Z"/></svg>
                     </button>
                     <span class="settings-label-bar">Settings</span>
@@ -938,10 +1032,11 @@ def get_chat_html():
             <main class="main-content">
                 <div class="chat-header">
                     <div class="left">
-                        <div class="panel-avatar">AI</div>
+                        <button class="mobile-menu-btn" onclick="toggleMobileSidebar()" aria-label="Open menu">☰</button>
+                        <div class="panel-avatar" id="panelAvatar">AI</div>
                         <div class="info">
-                            <strong>Local Assistant</strong>
-                            <span>Ready</span>
+                            <strong id="headerPersonaName">Local Assistant</strong>
+                            <span id="headerPersonaStatus">Ready</span>
                         </div>
                     </div>
                     <div class="chat-actions">
@@ -973,9 +1068,115 @@ def get_chat_html():
             </main>
         </div>
 
+        <div class="settings-modal" id="settingsModal" hidden>
+            <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+                <div class="settings-dialog-header"><h2 id="settingsTitle">Assistant settings</h2><button onclick="closeSettings()" aria-label="Close settings">×</button></div>
+                <label>System awareness <select id="awarenessSetting"><option value="off">Off</option><option value="basic">Basic</option><option value="full">Full</option></select></label>
+                <label class="setting-check"><input type="checkbox" id="powerSavingSetting"> Power-saving mode</label>
+                <label class="setting-check"><input type="checkbox" id="proactiveSetting"> Proactive messages</label>
+                <p class="settings-note">Proactive checks run every 60 seconds while enabled.</p>
+                <button class="sidebar-btn" onclick="saveSettings()">Save settings</button>
+                <button class="sidebar-btn" onclick="backupState()">Backup local state</button>
+            </div>
+        </div>
+
         <script>
             let chatHistory = [];
             let isGenerating = false;
+            let assistantSettings = JSON.parse(localStorage.getItem('assistantSettings') || '{}');
+
+            function toggleMobileSidebar() {
+                const sidebar = document.getElementById('sidebar');
+                if (sidebar) sidebar.classList.toggle('mobile-open');
+            }
+
+            function applyPersona(data) {
+                const name = data.persona_name || 'Local Assistant';
+                const avatarUrl = data.persona_avatar;
+                ['brandName', 'headerPersonaName'].forEach((id) => {
+                    const element = document.getElementById(id);
+                    if (element) element.textContent = name;
+                });
+                ['brandAvatar', 'panelAvatar'].forEach((id) => {
+                    const element = document.getElementById(id);
+                    if (!element) return;
+                    if (avatarUrl) {
+                        element.innerHTML = `<img src="${avatarUrl}" alt="${name} avatar">`;
+                    } else {
+                        element.textContent = name.slice(0, 2).toUpperCase();
+                    }
+                });
+                document.querySelectorAll('.msg-avatar').forEach((element) => {
+                    if (element.closest('.msg-wrapper.user')) return;
+                    if (avatarUrl) element.innerHTML = `<img src="${avatarUrl}" alt="${name} avatar">`;
+                    else element.textContent = name.slice(0, 2).toUpperCase();
+                });
+            }
+
+            function openSettings() {
+                const modal = document.getElementById('settingsModal');
+                if (!modal) return;
+                document.getElementById('awarenessSetting').value = assistantSettings.system_awareness || 'basic';
+                document.getElementById('powerSavingSetting').checked = Boolean(assistantSettings.power_saving_mode);
+                document.getElementById('proactiveSetting').checked = Boolean(assistantSettings.proactive_mode);
+                modal.hidden = false;
+            }
+
+            function closeSettings() {
+                const modal = document.getElementById('settingsModal');
+                if (modal) modal.hidden = true;
+            }
+
+            async function saveSettings() {
+                assistantSettings = {
+                    ...assistantSettings,
+                    system_awareness: document.getElementById('awarenessSetting').value,
+                    power_saving_mode: document.getElementById('powerSavingSetting').checked,
+                    proactive_mode: document.getElementById('proactiveSetting').checked,
+                    proactive_interval_seconds: 60
+                };
+                localStorage.setItem('assistantSettings', JSON.stringify(assistantSettings));
+                try {
+                    const response = await fetch('/api/settings', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(assistantSettings)
+                    });
+                    if (!response.ok) throw new Error('settings save failed');
+                    const data = await response.json();
+                    assistantSettings = data.settings || assistantSettings;
+                    localStorage.setItem('assistantSettings', JSON.stringify(assistantSettings));
+                    if (data.restart_required) alert('Power-saving runtime settings will apply after restarting the assistant.');
+                } catch (error) {
+                    console.error('Settings save error:', error);
+                }
+                closeSettings();
+                loadRuntimeStatus();
+            }
+
+            async function backupState() {
+                try {
+                    const response = await fetch('/api/backup', { method: 'POST' });
+                    if (!response.ok) throw new Error('backup failed');
+                    const data = await response.json();
+                    alert(data.created?.length ? 'Local state backed up.' : 'No state files were available to back up.');
+                } catch (error) {
+                    console.error('Backup error:', error);
+                    alert('Local backup failed.');
+                }
+            }
+
+            async function pollProactiveMessage() {
+                if (!assistantSettings.proactive_mode || assistantSettings.power_saving_mode) return;
+                try {
+                    const response = await fetch('/api/proactive');
+                    if (!response.ok) return;
+                    const data = await response.json();
+                    if (data.message) appendMsg(data.message, 'bot');
+                } catch (error) {
+                    console.error('Proactive status error:', error);
+                }
+            }
 
             function setCurrentTrack(title, folder = 'assets/music') {
                 const trackLabel = document.getElementById('currentTrackLabel');
@@ -1048,6 +1249,7 @@ def get_chat_html():
 
                 setCurrentTrack('No track playing', 'assets/music');
                 loadRuntimeStatus();
+                window.setInterval(pollProactiveMessage, 60000);
             });
 
             async function loadRuntimeStatus() {
@@ -1056,17 +1258,22 @@ def get_chat_html():
                 const mode = document.getElementById('runtimeMode');
                 const hardware = document.getElementById('runtimeHardware');
                 const safety = document.getElementById('runtimeSafety');
+                const latency = document.getElementById('runtimeLatency');
 
                 try {
                     const response = await fetch('/api/status');
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     const data = await response.json();
+                    assistantSettings = { ...data.settings, ...assistantSettings, proactive_interval_seconds: 60 };
+                    localStorage.setItem('assistantSettings', JSON.stringify(assistantSettings));
+                    applyPersona(data);
                     const ready = data.status === 'ready';
-                    if (statusLabel) statusLabel.textContent = ready ? 'Local AI ready' : 'Starting local AI';
+                    if (statusLabel) statusLabel.textContent = ready ? `${data.persona_name || 'Local AI'} ready` : 'Starting local AI';
                     if (statusDot) statusDot.style.background = ready ? '#37d67a' : '#f5b94a';
                     if (mode) mode.textContent = data.mode || 'unknown';
                     if (hardware) hardware.textContent = data.raspberry_pi ? 'Raspberry Pi' : 'Local host';
                     if (safety) safety.textContent = data.safe_execution ? 'Safe local mode' : 'Disabled';
+                    if (latency) latency.textContent = data.metrics?.average_latency_ms ? `${Math.round(data.metrics.average_latency_ms)} ms avg` : 'No requests';
                 } catch (error) {
                     if (statusLabel) statusLabel.textContent = 'Status unavailable';
                     if (statusDot) statusDot.style.background = '#e06b75';
@@ -1128,8 +1335,9 @@ def get_chat_html():
 
                             try {
                                 const parsed = JSON.parse(rawJson);
+                                if (parsed.delta) appendBotDelta(msgContentEl, parsed.delta);
                                 if (parsed.history) chatHistory = parsed.history;
-                                updateBotMsg(msgContentEl, parsed.response, parsed.hardware_cmd || 'NONE');
+                                if (parsed.response !== undefined) updateBotMsg(msgContentEl, parsed.response, parsed.hardware_cmd || 'NONE');
 
                                 if (parsed.hardware_cmd === 'MUSIC_ON' || parsed.hardware_cmd === 'MUSIC_SHUFFLE' || parsed.hardware_cmd === 'MUSIC_NEXT') {
                                     setCurrentTrack('Playing local music', 'assets/music');
@@ -1217,11 +1425,12 @@ def get_chat_html():
                                 try {
                                     const parsed = JSON.parse(rawJson);
                                     
+                                    if (parsed.delta) appendBotDelta(msgContentEl, parsed.delta);
                                     if (parsed.history) {
                                         chatHistory = parsed.history;
                                     }
 
-                                    updateBotMsg(msgContentEl, parsed.response, parsed.hardware_cmd || "NONE");
+                                    if (parsed.response !== undefined) updateBotMsg(msgContentEl, parsed.response, parsed.hardware_cmd || "NONE");
                                 } catch (err) {
                                     console.error("JSON parse error:", err);
                                 }
@@ -1354,7 +1563,8 @@ def get_chat_html():
                 if (sender === 'user') {
                     avatar.textContent = 'U';
                 } else {
-                    avatar.textContent = 'AI';
+                    const personaName = document.getElementById('headerPersonaName')?.textContent || 'AI';
+                    avatar.textContent = personaName.slice(0, 2).toUpperCase();
                 }
 
                 const msgContent = document.createElement('div');
@@ -1382,6 +1592,7 @@ def get_chat_html():
 
             function updateBotMsg(element, text, hwCmd = "NONE") {
                 const chatBox = document.getElementById('chatBox');
+                element.dataset.streamText = '';
                 element.innerHTML = parseMarkdown(text);
 
                 if (hwCmd !== "NONE") {
@@ -1391,6 +1602,13 @@ def get_chat_html():
                     element.appendChild(tag);
                 }
 
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+
+            function appendBotDelta(element, delta) {
+                const chatBox = document.getElementById('chatBox');
+                element.dataset.streamText = (element.dataset.streamText || '') + delta;
+                element.innerHTML = parseMarkdown(element.dataset.streamText) + '<span class="cursor"></span>';
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
         </script>

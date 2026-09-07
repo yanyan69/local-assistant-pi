@@ -1,6 +1,7 @@
 # persona.py
 
 ROBOT_NAME = "Jarvis"
+PERSONA_AVATAR = "/assets/avatars/assistant_placeholder.svg"
 
 SYSTEM_PROMPTS = {
     "casual": (

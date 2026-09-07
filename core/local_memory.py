@@ -1,13 +1,15 @@
 import os
 import sqlite3
 import threading
+from pathlib import Path
 from typing import List
 
+DEFAULT_MEMORY_DB = Path(__file__).resolve().parent.parent / "data" / "local_memory.db"
 
 class LocalMemoryStore:
     """Simple SQLite-backed memory store for local chat history and notes."""
 
-    def __init__(self, db_path: str = "local_memory.db"):
+    def __init__(self, db_path: str = str(DEFAULT_MEMORY_DB)):
         self.db_path = db_path
         self._lock = threading.RLock()
         self._conn = None
@@ -89,7 +91,7 @@ class LocalMemoryStore:
             history.append({"role": row["role"], "content": row["content"]})
         return history
 
-    def get_memory_summary(self, limit: int = 8) -> str:
+    def get_memory_summary(self, limit: int = 4, max_chars: int = 900) -> str:
         history = self.get_recent_history(limit=limit)
         lines = []
         facts = self.get_facts(limit=12)
@@ -105,7 +107,7 @@ class LocalMemoryStore:
             role = item.get("role", "user")
             content = item.get("content", "")
             lines.append(f"{role.title()}: {content}")
-        return "\n".join(lines)
+        return "\n".join(lines)[:max_chars]
 
     def add_fact(self, content: str, category: str = "general") -> None:
         value = str(content or "").strip()

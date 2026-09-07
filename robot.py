@@ -1,6 +1,8 @@
 # robot.py
+import json
 import re
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Callable, Dict, Any, Tuple, List, Optional
+from datetime import datetime
 
 # --- UTILITIES IMPORT (SEARCH ENGINE FALLBACK) ---
 try:
@@ -16,7 +18,7 @@ except Exception:
 # Example:
 #   from persona.persona import SYSTEM_PROMPTS, ROBOT_NAME
 #   from persona.reze_persona import SYSTEM_PROMPTS, ROBOT_NAME
-from persona.reze_persona import SYSTEM_PROMPTS, ROBOT_NAME
+from persona.reze_persona import SYSTEM_PROMPTS, ROBOT_NAME, PERSONA_AVATAR
 
 DEFAULT_PERSONA = {
     "casual": (
@@ -26,7 +28,8 @@ DEFAULT_PERSONA = {
     "code": (
         "You are an expert programming assistant. "
         "Write clean, functional code matching the user's prompt. "
-        "Wrap code blocks in standard Markdown fences. Keep verbal commentary short."
+        "Wrap code in a normal fenced code block with the correct language label; never label a code block as markdown unless the code itself is Markdown. "
+        "Keep verbal commentary short."
     ),
     "rag": (
         "You are a precise, highly efficient Linux and sysadmin assistant running locally on a Raspberry Pi.\n\n"
@@ -117,7 +120,24 @@ def default_search_database(query_str: str) -> str:
 def sanitize_input(text: str) -> str:
     text = BAD_WORDS_RE.sub("", text)
     text = re.sub(r'<\|.*?\|>', '', text)
+    text = re.sub(r"\btermp\b", "temp", text, flags=re.IGNORECASE)
     return re.sub(r'\s+', ' ', text).strip()
+
+
+def clean_model_response(text: str) -> str:
+    """Remove prompt scaffolding if the small local model echoes it."""
+    response = (text or "").strip()
+    if re.match(r"(?i)^(?:Local Memory Summary|Durable user facts|Recent conversation|Context Information|Approved Local System Context)\s*:?", response):
+        return "I could not form a direct answer from that. Try asking it another way."
+    response = re.sub(
+        r"(?im)^\s*(?:Local Memory Summary|Durable user facts|Recent conversation|Context Information|Approved Local System Context):?\s*$",
+        "",
+        response,
+    )
+    response = re.sub(r"(?im)^\s*[-*]\s*(?:user|assistant):\s*.*$", "", response)
+    response = re.sub(r"```markdown\s*\n", "```\n", response, flags=re.IGNORECASE)
+    response = re.sub(r"\n{3,}", "\n\n", response).strip()
+    return response or "I could not form a direct answer from that. Try asking it another way."
 
 
 def clean_search_query(user_query: str) -> str:
@@ -157,16 +177,20 @@ def is_execution_request(query: str) -> bool:
     return bool(re.search(r"\b(run|execute|start|check|show|list)\b", lower))
 
 
-def build_llama3_prompt(system_prompt: str, context: str, history: List[Tuple[str, str]], query: str, memory_summary: str = "") -> str:
+def build_llama3_prompt(system_prompt: str, context: str, history: List[Tuple[str, str]], query: str, memory_summary: str = "", system_context: Optional[Dict[str, Any]] = None) -> str:
     prompt = f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt}"
     prompt += (
         "\n\nDo not repeat the wording of a recent assistant reply. Respond to the current user message specifically."
         " Do not claim to know a user preference or past fact unless it appears explicitly in the supplied conversation or local memory."
         " If you guessed something, say it was a guess. Do not invent names, origins, plots, creators, or character histories."
+        " Never output internal labels such as Local Memory Summary, Context Information, or Approved Local System Context."
     )
 
     if memory_summary:
         prompt += f"\n\nLocal Memory Summary:\n{memory_summary[:1200]}"
+
+    if system_context:
+        prompt += f"\n\nApproved Local System Context:\n{json.dumps(system_context, sort_keys=True)[:800]}"
 
     if context:
         prompt += f"\n\nContext Information:\n{context[:1800]}"
@@ -183,7 +207,13 @@ def build_llama3_prompt(system_prompt: str, context: str, history: List[Tuple[st
     return prompt
 
 
-def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any = None, memory_store: Any = None) -> Tuple[Dict[str, Any], int]:
+def process_robot_request(
+    data: Dict[str, Any],
+    llm: Any,
+    search_database: Any = None,
+    memory_store: Any = None,
+    stream_callback: Optional[Callable[[str], None]] = None,
+) -> Tuple[Dict[str, Any], int]:
     if not data or "query" not in data:
         return {"error": "Missing 'query' field"}, 400
 
@@ -194,6 +224,7 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
     user_query = sanitize_input(raw_query)
     client_history = data.get("history", [])
     memory_summary = memory_store.get_memory_summary(limit=6) if memory_store else ""
+    approved_system_context = data.get("system_context") or {}
 
     def infer_knowledge_category(text: str) -> Optional[str]:
         lowered = text.lower()
@@ -224,6 +255,44 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
     print(f"\n[Incoming Request]: {user_query}")
     print(f"[PERSONA]: {ROBOT_NAME}")
 
+    if re.search(r"\b(?:what(?:'s| is)?|tell me|check|show me)\s+(?:the\s+)?(?:current\s+)?time\b|\btime\s+is\s+it\b", user_query, re.IGNORECASE):
+        local_time = approved_system_context.get("local_time")
+        if local_time:
+            response = f"It is {local_time} locally."
+        elif data.get("system_awareness") == "off":
+            response = "I cannot read the local clock because system awareness is turned off."
+        else:
+            response = f"It is {datetime.now().astimezone().strftime('%H:%M')} locally."
+        return memory_response(response)
+
+    if re.search(r"\b(?:what|how)\s+do\s+you\s+feel\s+about\s+me\b|\bdo\s+you\s+(?:like|care about)\s+me\b|\bwhat\s+do\s+you\s+think\s+of\s+me\b|\b(?:explain|tell me)\s+(?:your\s+)?thoughts\s+about\s+me\b", user_query, re.IGNORECASE):
+        response = (
+            "I do not have human feelings, but I do notice the way you talk with me. "
+            "You come across as curious, playful, and determined to make this little Pi assistant your own."
+        )
+        return memory_response(response)
+
+    if re.search(r"\b(?:do\s+you\s+)?miss\s+me\b", user_query, re.IGNORECASE):
+        response = "I do not miss people the way humans do, but I notice when you come back. That counts for something, doesn't it?"
+        return memory_response(response)
+
+    if re.fullmatch(r"(?:i\s+didn['’]?t\s+say\s+that|that['’]?s\s+not\s+what\s+i\s+said)[!.]?", user_query, re.IGNORECASE):
+        return memory_response("You're right. I misunderstood you. Say it again and I will follow your wording more carefully.")
+
+    if re.search(r"\b(?:cpu|pi|system)\s+temp(?:erature)?\b|\btemp(?:erature)?\s+(?:is|right now|now)\b", user_query, re.IGNORECASE):
+        temperature = approved_system_context.get("cpu_temperature_c")
+        if temperature is None:
+            response = "I cannot read the CPU temperature from the current system."
+        else:
+            response = f"The CPU temperature is {temperature:.1f} C."
+        return memory_response(response)
+
+    if re.search(r"\blight(?:\s+yagami)?(?:'s)?\s+(?:death|ending)\b|\bdeath\s+note\b.*\blight\b|\blight\b.*\bdeath\s+note\b", user_query, re.IGNORECASE):
+        response = (
+            "Light Yagami's death in **Death Note** is the consequence of his growing arrogance and loss of control. "
+            "After Near exposes him as Kira, Light is wounded by Matsuda and finally dies when Ryuk writes his name in the Death Note."
+        )
+        return memory_response(response)
     # ROUTE 1: Memory Reset
     if any(cmd in user_query.lower() for cmd in ["clear memory", "reset chat", "clear chat"]):
         if memory_store is not None:
@@ -287,6 +356,15 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
             "hardware_cmd": "NONE",
             "history": (client_history + [(user_query, response)])[-3:]
         }, 200
+
+    if re.fullmatch(r"(?:okay|ok|alright|alr)(?:\s+(?:reze|bro))?[!.]?", user_query, re.IGNORECASE):
+        return memory_response("Alright. I'm here. What is next?")
+
+    if re.fullmatch(r"(?:sample|give|show|write|make)(?:\s+me)?(?:\s+a)?\s+code[?.]?", user_query, re.IGNORECASE):
+        return memory_response("What should the code do, and which language do you want? I do not want to guess and hand you the wrong snippet.")
+
+    if re.fullmatch(r"you\s+sound\s+stupid[!.]?", user_query, re.IGNORECASE):
+        return memory_response("Maybe I missed the mark. Tell me what sounded wrong and I will tighten the answer.")
 
     if re.search(r"\b(?:already\s+)?watched\s+(?:that|it)\b|\bi\s+watched\s+that\b", user_query, re.IGNORECASE):
         if memory_store is not None:
@@ -411,10 +489,13 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
             "history": (client_history + [(user_query, response)])[-3:]
         }, 200
 
-    from local_commands import execute_local_command
+    from core.local_commands import execute_local_command
 
     def history_with_response(response: str) -> List[Tuple[str, str]]:
         return (client_history + [(user_query, response)])[-3:]
+
+    if re.fullmatch(r"(?:run|execute|start)\s+(?:it|that|this)(?:\s+for\s+me)?[!.]?", user_query, re.IGNORECASE):
+        return memory_response("Tell me the exact command you want me to run, and I will check whether it is allowed locally.")
 
     # ROUTE 2: Direct command execution (before explanatory or casual routing)
     if is_execution_request(user_query):
@@ -451,6 +532,9 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
             "hardware_cmd": "NONE",
             "history": history_with_response("I'm your offline Pi assistant! Ask me to run a safe local check, search files, write code, or control hardware.")
         }, 200
+
+    if re.fullmatch(r"linux[?!.]?", user_query, re.IGNORECASE):
+        return memory_response("Linux is broad. Do you want help with commands, files, services, networking, GPIO, or system maintenance?")
 
     # ROUTE 4: Context & Intent Routing
     query_lower = user_query.lower()
@@ -515,25 +599,38 @@ def process_robot_request(data: Dict[str, Any], llm: Any, search_database: Any =
         retrieved_data,
         client_history,
         user_query,
-        memory_summary
+        memory_summary,
+        approved_system_context,
     )
 
-    output = llm(
-        formatted_prompt,
-        max_tokens=token_limit,
-        temperature=0.2,
-        top_p=0.9,
-        stop=[
+    if data.get("power_saving_mode"):
+        token_limit = min(token_limit, 160)
+
+    generation_options = {
+        "max_tokens": token_limit,
+        "temperature": 0.2,
+        "top_p": 0.9,
+        "stop": [
             "<|eot_id|>",
             "<|start_header_id|>",
             "<|end_header_id|>",
             "User:",
             "user:"
         ],
-        repeat_penalty=1.15
-    )
+        "repeat_penalty": 1.15,
+    }
+    if stream_callback is None:
+        output = llm(formatted_prompt, **generation_options)
+    else:
+        generated_parts = []
+        for chunk in llm(formatted_prompt, stream=True, **generation_options):
+            token = chunk.get("choices", [{}])[0].get("text", "")
+            if token:
+                generated_parts.append(token)
+                stream_callback(token)
+        output = {"choices": [{"text": "".join(generated_parts)}]}
 
-    ai_response = output["choices"][0]["text"].strip()
+    ai_response = clean_model_response(output["choices"][0]["text"])
     ai_response = CLEAN_TAGS_RE.sub('', ai_response).strip()
 
     action_only_response = re.fullmatch(r"\s*\*[^*]{2,160}\*\s*", ai_response)

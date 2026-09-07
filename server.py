@@ -7,11 +7,16 @@ import json
 import asyncio
 import shlex
 import subprocess
+import time
+import threading
+import socket
+import queue
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager, contextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 # Suppress Llama native logs via environment variables before import
@@ -20,13 +25,31 @@ os.environ["LLAMA_LOG_LEVEL"] = "ERROR"
 from llama_cpp import Llama
 from web_ui import get_chat_html
 from robot import process_robot_request
-from app_config import build_runtime_config
-from local_memory import LocalMemoryStore
+from core.app_config import SETTINGS_PATH, build_runtime_config, load_settings, save_settings
+from core.local_memory import LocalMemoryStore
+from robot import ROBOT_NAME, PERSONA_AVATAR
+from core.system_context import read_system_context
+from core.tools import TOOL_SCHEMAS, execute_tool
+from core.backup import create_state_backup
 
 
-MODEL_PATH = "./Llama-3.2-1B-Instruct.Q4_K_M.gguf"
-DB_PATH = "knowledge_base.db"
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(PROJECT_ROOT, "data", "Llama-3.2-1B-Instruct.Q4_K_M.gguf")
+DB_PATH = os.path.join(PROJECT_ROOT, "data", "knowledge_base.db")
 RUNTIME_CONFIG = build_runtime_config(os.getenv("LOCAL_ASSISTANT_MODE", "balanced"))
+SERVER_PORT = int(os.getenv("LOCAL_ASSISTANT_PORT", os.getenv("PORT", "5000")))
+SETTINGS = RUNTIME_CONFIG["settings"]
+PROACTIVE_STATE = {"last_key": None}
+METRICS_LOCK = threading.Lock()
+METRICS = {
+    "requests": 0,
+    "completed": 0,
+    "errors": 0,
+    "last_latency_ms": 0.0,
+    "average_latency_ms": 0.0,
+    "last_response_chars": 0,
+    "model_load_ms": 0.0,
+}
 
 # Global references
 llm: Llama = None
@@ -206,6 +229,7 @@ def search_database(query: str, max_results: int = 4, category: str = None) -> s
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global llm
+    model_started_at = time.perf_counter()
     print(f"[SYSTEM INFO]: Initializing local assistant with mode='{RUNTIME_CONFIG['mode']}' on Raspberry Pi 5...")
     print(f"[SYSTEM INFO]: Runtime config -> threads={RUNTIME_CONFIG['n_threads']}, batch={RUNTIME_CONFIG['n_batch']}, ctx={RUNTIME_CONFIG['n_ctx']}")
 
@@ -219,6 +243,8 @@ async def lifespan(app: FastAPI):
             verbose=False,
             loghandler=None
         )
+    with METRICS_LOCK:
+        METRICS["model_load_ms"] = round((time.perf_counter() - model_started_at) * 1000, 2)
 
     if sys.platform == "win32":
         kernel32 = ctypes.windll.kernel32
@@ -229,6 +255,8 @@ async def lifespan(app: FastAPI):
 
     print("[SYSTEM INFO]: Llama 3.2 engine active and ready.")
     init_fts5_index()
+    backup_result = create_state_backup()
+    print(f"[SYSTEM INFO]: State backup ready ({len(backup_result['created'])} file(s)).")
     memory_store.clear() if not os.path.exists(RUNTIME_CONFIG["memory_db_path"]) else None
     print(f"[SYSTEM INFO]: Local memory store ready at {RUNTIME_CONFIG['memory_db_path']}")
 
@@ -238,6 +266,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
 
 # --- ROUTES ---
@@ -248,36 +277,174 @@ async def render_browser_interface():
 
 @app.get("/api/status")
 async def status_endpoint():
+    context = read_system_context(SETTINGS)
     return {
         "status": "ready" if llm is not None else "starting",
         "mode": RUNTIME_CONFIG["mode"],
+        "effective_mode": RUNTIME_CONFIG["effective_mode"],
         "platform": RUNTIME_CONFIG["platform"],
         "raspberry_pi": RUNTIME_CONFIG["is_raspberry_pi"],
         "safe_execution": RUNTIME_CONFIG["safe_execution"],
         "threads": RUNTIME_CONFIG["n_threads"],
         "context": RUNTIME_CONFIG["n_ctx"],
+        "persona_name": ROBOT_NAME,
+        "persona_avatar": PERSONA_AVATAR,
+        "settings": SETTINGS,
+        "system_context": context,
+        "metrics": METRICS,
+        "port": SERVER_PORT,
     }
+
+
+@app.get("/api/health")
+async def health_endpoint():
+    with METRICS_LOCK:
+        metrics = dict(METRICS)
+    return {
+        "status": "ok" if llm is not None else "starting",
+        "model_loaded": llm is not None,
+        "knowledge_database": os.path.exists(DB_PATH),
+        "memory_database": os.path.exists(RUNTIME_CONFIG["memory_db_path"]),
+        "settings_file": SETTINGS_PATH.exists(),
+        "metrics": metrics,
+    }
+
+
+@app.get("/api/metrics")
+async def metrics_endpoint():
+    with METRICS_LOCK:
+        return dict(METRICS)
+
+
+@app.get("/api/tools")
+async def tools_endpoint():
+    return {"tools": TOOL_SCHEMAS}
+
+
+@app.post("/api/tools/{tool_name}")
+async def tool_endpoint(tool_name: str, request: Request):
+    data = await request.json()
+    return execute_tool(tool_name, data if isinstance(data, dict) else {})
+
+
+@app.post("/api/backup")
+async def backup_endpoint():
+    return create_state_backup()
+
+
+@app.get("/api/settings")
+async def settings_endpoint():
+    return SETTINGS
+
+
+@app.put("/api/settings")
+async def update_settings_endpoint(request: Request):
+    global SETTINGS
+    updates = await request.json()
+    if not isinstance(updates, dict):
+        return {"status": "error", "message": "Settings must be a JSON object."}
+    previous_power_saving = bool(SETTINGS.get("power_saving_mode"))
+    SETTINGS = save_settings(updates)
+    RUNTIME_CONFIG["settings"] = SETTINGS
+    restart_required = previous_power_saving != bool(SETTINGS.get("power_saving_mode"))
+    return {"status": "ok", "settings": SETTINGS, "restart_required": restart_required}
+
+
+@app.get("/api/proactive")
+async def proactive_endpoint():
+    if not SETTINGS.get("proactive_mode") or SETTINGS.get("power_saving_mode"):
+        return {"message": None, "context": {}}
+
+    context = read_system_context(SETTINGS)
+    local_time = context.get("local_time")
+    if not local_time:
+        return {"message": None, "context": context}
+
+    hour = int(local_time.split(":", 1)[0])
+    event_key = f"late-night:{context.get('local_date')}"
+    message = None
+    if 3 <= hour < 5 and PROACTIVE_STATE["last_key"] != event_key:
+        message = f"It is {local_time}. You have entered the suspiciously late hours. Want me to switch to power-saving mode so you can sleep?"
+        PROACTIVE_STATE["last_key"] = event_key
+
+    temperature = context.get("cpu_temperature_c")
+    thermal_key = f"thermal:{context.get('local_date')}:{hour}"
+    if temperature is not None and temperature >= 80 and PROACTIVE_STATE["last_key"] != thermal_key:
+        message = f"The Pi is running hot at {temperature:.1f} C. I recommend pausing heavy work and checking airflow."
+        PROACTIVE_STATE["last_key"] = thermal_key
+
+    battery = context.get("battery", {}).get("percent")
+    battery_key = f"battery:{context.get('local_date')}:{hour}"
+    if battery is not None and battery <= 15 and PROACTIVE_STATE["last_key"] != battery_key:
+        message = f"Battery is at {battery}%. Please connect power soon."
+        PROACTIVE_STATE["last_key"] = battery_key
+
+    return {"message": message, "context": context}
 
 
 @app.post("/api/robot")
 async def robot_endpoint(request: Request):
     data = await request.json()
+    data["system_context"] = read_system_context(SETTINGS)
+    data["power_saving_mode"] = bool(SETTINGS.get("power_saving_mode"))
+    data["system_awareness"] = SETTINGS.get("system_awareness", "basic")
 
     async def event_stream() -> AsyncGenerator[str, None]:
         async with llm_lock:
             loop = asyncio.get_running_loop()
+            started_at = time.perf_counter()
+            with METRICS_LOCK:
+                METRICS["requests"] += 1
 
-            result_dict, status_code = await loop.run_in_executor(
-                None,
-                process_robot_request,
-                data,
-                llm,
-                search_database,
-                memory_store
-            )
+            token_queue = queue.Queue()
+
+            def on_token(token: str) -> None:
+                token_queue.put(token)
+
+            try:
+                request_future = loop.run_in_executor(
+                    None,
+                    process_robot_request,
+                    data,
+                    llm,
+                    search_database,
+                    memory_store,
+                    on_token,
+                )
+                while not request_future.done():
+                    while True:
+                        try:
+                            token = token_queue.get_nowait()
+                        except queue.Empty:
+                            break
+                        yield f"data: {json.dumps({'delta': token})}\n\n"
+                    await asyncio.sleep(0.03)
+                result_dict, status_code = await request_future
+                while True:
+                    try:
+                        token = token_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                    yield f"data: {json.dumps({'delta': token})}\n\n"
+            except Exception:
+                with METRICS_LOCK:
+                    METRICS["errors"] += 1
+                raise
+
+            elapsed_ms = (time.perf_counter() - started_at) * 1000
+            response_text = result_dict.get("response", "")
+            with METRICS_LOCK:
+                completed = METRICS["completed"] + 1
+                METRICS["completed"] = completed
+                METRICS["last_latency_ms"] = round(elapsed_ms, 2)
+                METRICS["average_latency_ms"] = round(
+                    ((METRICS["average_latency_ms"] * (completed - 1)) + elapsed_ms) / completed,
+                    2,
+                )
+                METRICS["last_response_chars"] = len(response_text)
 
             payload = {
-                "response": result_dict.get("response", ""),
+                "response": response_text,
                 "hardware_cmd": result_dict.get("hardware_cmd", "NONE"),
                 "history": result_dict.get("history", []),
                 "status": status_code
@@ -324,4 +491,16 @@ async def automation_endpoint(request: Request):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=5000, workers=1)
+    selected_port = SERVER_PORT
+    for candidate in range(SERVER_PORT, SERVER_PORT + 10):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind(("0.0.0.0", candidate))
+            except OSError:
+                continue
+            selected_port = candidate
+            break
+    if selected_port != SERVER_PORT:
+        print(f"[SYSTEM INFO]: Port {SERVER_PORT} is busy; using port {selected_port}.")
+    SERVER_PORT = selected_port
+    uvicorn.run(app, host="0.0.0.0", port=selected_port, workers=1)

@@ -12,7 +12,7 @@ import sqlite3
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 KB_DIR = os.path.join(BASE_DIR, "knowledge_base")
 BUILD_DIR = os.path.join(BASE_DIR, "build_tmp")
-DB_PATH = os.path.join(BASE_DIR, "knowledge_base.db")
+DB_PATH = os.path.join(BASE_DIR, "data", "knowledge_base.db")
 
 
 def prepare_directories():
@@ -278,7 +278,7 @@ def populate_sqlite_database():
 
         conn.commit()
 
-    print(f"[+] Successfully saved {inserted_count} files into `knowledge_base.db`.")
+    print(f"[+] Successfully saved {inserted_count} files into `data/knowledge_base.db`.")
     rebuild_fts_index()
 
 
@@ -330,4 +330,4 @@ if __name__ == "__main__":
     fetch_open_knowledge_sources()
     populate_sqlite_database()
     cleanup()
-    print("\n[+] Ingestion complete! SQLite database updated at `./knowledge_base.db`.")
+    print("\n[+] Ingestion complete! SQLite database updated at `./data/knowledge_base.db`.")
