@@ -34,7 +34,8 @@ from core.backup import create_state_backup
 
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(PROJECT_ROOT, "data", "Llama-3.2-1B-Instruct.Q4_K_M.gguf")
+DEFAULT_MODEL_PATH = os.path.join(PROJECT_ROOT, "data", "Llama-3.2-1B-Instruct.Q4_K_M.gguf")
+MODEL_PATH = os.path.abspath(os.getenv("LOCAL_ASSISTANT_MODEL", DEFAULT_MODEL_PATH))
 DB_PATH = os.path.join(PROJECT_ROOT, "data", "knowledge_base.db")
 RUNTIME_CONFIG = build_runtime_config(os.getenv("LOCAL_ASSISTANT_MODE", "balanced"))
 SERVER_PORT = int(os.getenv("LOCAL_ASSISTANT_PORT", os.getenv("PORT", "5000")))
@@ -232,6 +233,13 @@ async def lifespan(app: FastAPI):
     model_started_at = time.perf_counter()
     print(f"[SYSTEM INFO]: Initializing local assistant with mode='{RUNTIME_CONFIG['mode']}' on Raspberry Pi 5...")
     print(f"[SYSTEM INFO]: Runtime config -> threads={RUNTIME_CONFIG['n_threads']}, batch={RUNTIME_CONFIG['n_batch']}, ctx={RUNTIME_CONFIG['n_ctx']}")
+
+    if not os.path.isfile(MODEL_PATH):
+        raise RuntimeError(
+            f"Model file not found: {MODEL_PATH}. "
+            "Run 'myenv/bin/python utilities/download_model.py' on the Raspberry Pi "
+            "or set LOCAL_ASSISTANT_MODEL to an existing GGUF file."
+        )
 
     with silence_all_output():
         llm = Llama(

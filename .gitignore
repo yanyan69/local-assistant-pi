@@ -3,7 +3,7 @@ __pycache__/
 server-files-draft/
 
 *.gguf
-Llama-3.2-1B-Instruct.Q4_K_M.ggufmyenv
+myenv/
 .claudeignore
 knowledge_base/
 data/*.gguf

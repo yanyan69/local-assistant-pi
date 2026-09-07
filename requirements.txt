@@ -12,6 +12,7 @@
 fastapi
 uvicorn
 llama-cpp-python
+modelscope
 
 ##features to add
 #secure code execution API route to backend,ideally sandboxed
