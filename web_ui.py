@@ -1383,7 +1383,14 @@ def get_chat_html():
                 }
 
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            channelCount: 1,
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true,
+                        }
+                    });
                     voiceChunks = [];
                     voiceRecorder = new MediaRecorder(stream);
                     voiceRecorder.ondataavailable = (event) => {
