@@ -12,7 +12,10 @@ Web UI / future TUI / future voice client
        memory  knowledge  media  voice
 ```
 
-- `web_ui.py`: browser presentation only.
+- `web_ui.py`: loads the browser client only.
+- `web_ui/index.html`: browser markup.
+- `web_ui/styles.css`: browser styling.
+- `web_ui/app.js`: browser interaction and API calls.
 - `server.py`: local transport and orchestration.
 - `robot.py`: intent routing and assistant behavior.
 - `core/local_memory.py`: durable facts and compact summaries.

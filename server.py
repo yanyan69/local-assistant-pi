@@ -304,6 +304,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+app.mount("/web_ui", StaticFiles(directory="web_ui"), name="web_ui")
 
 
 # --- ROUTES ---

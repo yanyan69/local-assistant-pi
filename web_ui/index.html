@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local Assistant</title>
+  <link rel="stylesheet" href="/web_ui/styles.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><div class="avatar" id="brandAvatar">AI</div><div><strong id="brandName">Local Assistant</strong><small id="statusLabel">Starting</small></div><button class="icon-button sidebar-toggle" id="sidebarToggle" aria-label="Collapse sidebar">☰</button></div>
+      <button class="new-chat" id="newChatButton">＋ <span>New chat</span></button>
+      <div class="history-menu">
+        <button class="history-toggle" id="historyToggle" aria-expanded="false">Chat history <span>⌄</span></button>
+        <div class="conversation-list" id="conversationList" hidden></div>
+      </div>
+      <div class="sidebar-spacer"></div>
+      <div class="system-info"><span id="runtimeMode">Loading...</span><span id="runtimeHardware">Local host</span><span id="runtimeLatency">No requests</span></div>
+    </aside>
+    <main class="main-content">
+      <header class="chat-header"><button class="mobile-menu" id="mobileMenu" aria-label="Open sidebar">☰</button><div class="avatar" id="panelAvatar">AI</div><div><strong id="headerPersonaName">Local Assistant</strong><small id="headerPersonaStatus">Ready</small></div></header>
+      <section class="chat-box" id="chatBox"><div class="chat-container" id="chatContainer"><div class="message bot"><div class="message-avatar">AI</div><div class="message-body">System initialized and running locally. Ask for code, Linux help, or hardware control.</div></div></div></section>
+      <form class="input-container" id="messageForm"><textarea id="userInput" rows="1" placeholder="Message the assistant..."></textarea><button class="voice-button" id="voiceButton" type="button" aria-label="Speak">🎙</button><button class="send-button" id="sendButton" type="submit" aria-label="Send">➜</button></form>
+    </main>
+  </div>
+  <script src="/web_ui/app.js"></script>
+</body>
+</html>
