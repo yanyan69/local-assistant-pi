@@ -83,6 +83,7 @@ KNOWLEDGE_DB_PATH = config_path("KNOWLEDGE_DB_PATH", DATA_DIR / "knowledge_base.
 MODEL_PATH = config_path("MODEL_PATH", DATA_DIR / "Llama-3.2-1B-Instruct.Q4_K_M.gguf", ["LOCAL_ASSISTANT_MODEL"])
 JELLYFIN_URL = str(config_value("JELLYFIN_URL", "", ["JELLYFIN_URL"]))
 JELLYFIN_TOKEN = str(config_value("JELLYFIN_TOKEN", "", ["JELLYFIN_TOKEN"]))
+JELLYFIN_ENABLED = str(config_value("JELLYFIN_ENABLED", "false", ["LOCAL_ASSISTANT_JELLYFIN_ENABLED"])).strip().lower() in {"1", "true", "yes", "on"}
 SERVER_PORT = int(config_value("SERVER_PORT", os.getenv("PORT", "5000"), ["LOCAL_ASSISTANT_PORT", "PORT"]))
 PERSONA_MODULE = str(config_value("PERSONA_MODULE", "persona.reze_persona", ["LOCAL_ASSISTANT_PERSONA_MODULE"]))
 VOICE_ENABLED = str(config_value("VOICE_ENABLED", "false", ["LOCAL_ASSISTANT_VOICE_ENABLED"])).strip().lower() in {"1", "true", "yes", "on"}
@@ -108,7 +109,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "allow_process_inspection": False,
     "proactive_interval_seconds": 60,
     "max_memory_summary_chars": 900,
-    "jellyfin_enabled": bool(JELLYFIN_URL and JELLYFIN_TOKEN),
+    "jellyfin_enabled": JELLYFIN_ENABLED and bool(JELLYFIN_URL and JELLYFIN_TOKEN),
 }
 
 

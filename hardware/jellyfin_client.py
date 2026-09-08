@@ -5,20 +5,21 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
-from core.app_config import JELLYFIN_TOKEN, JELLYFIN_URL
+from core.app_config import JELLYFIN_ENABLED, JELLYFIN_TOKEN, JELLYFIN_URL
 
 
 class JellyfinClient:
     """Small allowlisted Jellyfin client for local media playback control."""
 
-    def __init__(self, base_url: Optional[str] = None, token: Optional[str] = None, timeout: int = 5):
+    def __init__(self, base_url: Optional[str] = None, token: Optional[str] = None, timeout: int = 5, enabled: bool = JELLYFIN_ENABLED):
         self.base_url = (base_url or JELLYFIN_URL).strip().rstrip("/")
         self.token = (token or JELLYFIN_TOKEN).strip()
         self.timeout = timeout
+        self.enabled = bool(enabled)
 
     @property
     def configured(self) -> bool:
-        return bool(self.base_url and self.token)
+        return self.enabled and bool(self.base_url and self.token)
 
     def _request(self, method: str, path: str, payload: Optional[Dict[str, Any]] = None) -> Any:
         if not path.startswith("/") or ".." in path:

@@ -46,6 +46,21 @@ Piper TTS can speak completed responses locally. Set `TTS_ENABLED=true` and
 choose a voice model with `TTS_MODEL_PATH`; voice models can live in
 `assets/voices/` or an external configured directory.
 
+Jellyfin control is explicitly opt-in:
+
+```ini
+JELLYFIN_ENABLED=false
+JELLYFIN_URL=http://127.0.0.1:8096
+JELLYFIN_TOKEN=your-token
+```
+
+Set `JELLYFIN_ENABLED=true` only when Jellyfin is running and you want the
+assistant to control it. This flag does not start or stop the Jellyfin daemon;
+use `systemctl start|stop|enable|disable jellyfin` for that.
+
+Whisper and Piper share one voice-processing slot. If one is transcribing or
+speaking, a second voice job is rejected instead of accumulating in memory.
+
 ## Replaceable clients
 
 `web_ui.py` is only the browser client. A future TUI can call the same

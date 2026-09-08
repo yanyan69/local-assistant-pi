@@ -80,3 +80,7 @@ For a project-local voice library, put the `.onnx` model and its matching
 `.onnx.json` file in `assets/voices/`. Change `TTS_MODEL_PATH` to select a
 different voice. The browser requests `/api/tts` after each completed response
 and plays the returned WAV audio locally.
+
+Whisper and Piper are serialized on the Pi. A new voice request is rejected
+while another transcription or speech-generation job is active, preventing
+multiple model processes from competing for 4 GB of RAM.

@@ -32,4 +32,5 @@ TTS_MODEL_PATH=assets/voices/en_US-lessac-medium.onnx
 TTS_VOICE_DIR=assets/voices
 TTS_LENGTH_SCALE=1.0
 JELLYFIN_URL=
+JELLYFIN_ENABLED=false
 # Keep JELLYFIN_TOKEN in the environment rather than this file.

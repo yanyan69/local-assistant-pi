@@ -28,6 +28,7 @@ from robot import process_robot_request
 from core.app_config import (
     JELLYFIN_TOKEN,
     JELLYFIN_URL,
+    JELLYFIN_ENABLED,
     KNOWLEDGE_DB_PATH,
     MEDIA_DIR,
     MODEL_PATH as CONFIG_MODEL_PATH,
@@ -74,6 +75,7 @@ memory_store = LocalMemoryStore(RUNTIME_CONFIG["memory_db_path"])
 conversation_store = ConversationStore()
 voice_transcriber = WhisperCppTranscriber()
 tts_synthesizer = PiperSynthesizer()
+voice_operation_lock = threading.Lock()
 
 
 def is_allowed_command(command: str) -> bool:
@@ -388,6 +390,7 @@ async def voice_status_endpoint():
         "language": voice_transcriber.language,
         "tts_enabled": TTS_ENABLED,
         "tts_configured": tts_synthesizer.configured,
+        "jellyfin_enabled": JELLYFIN_ENABLED,
     }
 
 
@@ -397,17 +400,23 @@ async def tts_endpoint(request: Request):
         return {"status": "disabled", "message": "Text to speech is disabled in local-ai.config."}
     data = await request.json()
     text = data.get("text", "") if isinstance(data, dict) else ""
+    if not voice_operation_lock.acquire(blocking=False):
+        return {"status": "busy", "message": "Voice processing is busy. Try again shortly."}
     try:
         audio = await asyncio.get_running_loop().run_in_executor(None, tts_synthesizer.synthesize, text)
         return StreamingResponse(iter([audio]), media_type="audio/wav", headers={"Cache-Control": "no-store"})
     except Exception as error:
         return {"status": "error", "message": str(error)}
+    finally:
+        voice_operation_lock.release()
 
 
 @app.post("/api/voice/transcribe")
 async def voice_transcribe_endpoint(request: Request):
     if not VOICE_ENABLED:
         return {"status": "disabled", "message": "Voice input is disabled in local-ai.config."}
+    if not voice_operation_lock.acquire(blocking=False):
+        return {"status": "busy", "message": "Voice processing is busy. Try again shortly."}
     try:
         audio = await request.body()
         content_type = request.headers.get("content-type", "audio/webm")
@@ -420,6 +429,8 @@ async def voice_transcribe_endpoint(request: Request):
         return {"status": "ok", "text": text}
     except Exception as error:
         return {"status": "error", "message": str(error)}
+    finally:
+        voice_operation_lock.release()
 
 
 @app.post("/api/tools/{tool_name}")
