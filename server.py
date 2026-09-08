@@ -92,6 +92,15 @@ def is_allowed_command(command: str) -> bool:
     return any(safe_cmd == allowed or safe_cmd.startswith(f"{allowed} ") for allowed in allowlist)
 
 
+def is_port_available(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", int(port)))
+        except OSError:
+            return False
+    return True
+
+
 # --- SILENCE C-LEVEL OUTPUT ---
 @contextmanager
 def silence_all_output():
@@ -572,16 +581,10 @@ async def automation_endpoint(request: Request):
 
 
 if __name__ == "__main__":
-    selected_port = SERVER_PORT
-    for candidate in range(SERVER_PORT, SERVER_PORT + 10):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-            try:
-                probe.bind(("0.0.0.0", candidate))
-            except OSError:
-                continue
-            selected_port = candidate
-            break
-    if selected_port != SERVER_PORT:
-        print(f"[SYSTEM INFO]: Port {SERVER_PORT} is busy; using port {selected_port}.")
-    SERVER_PORT = selected_port
-    uvicorn.run(app, host="0.0.0.0", port=selected_port, workers=1)
+    if not is_port_available(SERVER_PORT):
+        raise RuntimeError(
+            f"Configured port {SERVER_PORT} is already in use. "
+            "Stop the other service or change SERVER_PORT in local-ai.config."
+        )
+
+    uvicorn.run(app, host="127.0.0.1", port=SERVER_PORT, workers=1)
