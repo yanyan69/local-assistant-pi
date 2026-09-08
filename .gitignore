@@ -15,3 +15,5 @@ data/backups/
 data/local_memory.db
 data/conversations/
 local-ai.config
+assets/music/
+assets/voices/

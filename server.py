@@ -303,7 +303,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
+os.makedirs(ASSETS_DIR, exist_ok=True)
+app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 app.mount("/web_ui", StaticFiles(directory="web_ui"), name="web_ui")
 
 
