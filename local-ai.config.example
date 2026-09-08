@@ -1,0 +1,29 @@
+# Copy to local-ai.config or ~/.config/local-assistant/local-ai.config
+# Relative paths are resolved from the project directory.
+DATA_DIR=data
+KNOWLEDGE_BASE_DIR=knowledge_base
+BUILD_DIR=build_tmp
+MEDIA_DIR=assets/music
+CONVERSATIONS_DIR=data/conversations
+SETTINGS_PATH=data/assistant_settings.json
+MEMORY_DB_PATH=data/local_memory.db
+KNOWLEDGE_DB_PATH=data/knowledge_base.db
+MODEL_PATH=data/Llama-3.2-1B-Instruct.Q4_K_M.gguf
+SERVER_PORT=5000
+MODE=balanced
+SYSTEM_AWARENESS=basic
+POWER_SAVING_MODE=false
+PROACTIVE_MODE=false
+ALLOW_CLOCK=true
+ALLOW_THERMAL_STATUS=true
+ALLOW_BATTERY_STATUS=true
+ALLOW_PROCESS_INSPECTION=false
+MAX_MEMORY_SUMMARY_CHARS=900
+PERSONA_MODULE=persona.reze_persona
+VOICE_ENABLED=false
+WHISPER_CPP_PATH=whisper-cli
+WHISPER_MODEL_PATH=data/ggml-base.en.bin
+VOICE_LANGUAGE=en
+FFMPEG_PATH=ffmpeg
+JELLYFIN_URL=
+# Keep JELLYFIN_TOKEN in the environment rather than this file.

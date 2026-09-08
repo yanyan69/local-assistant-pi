@@ -2,10 +2,9 @@ import os
 import random
 import subprocess
 from typing import Optional, List
+from core.app_config import MEDIA_DIR
 
-
-DEFAULT_MUSIC_DIR = os.path.join(os.path.dirname(__file__), "..", "assets", "music")
-DEFAULT_MUSIC_DIR = os.path.abspath(DEFAULT_MUSIC_DIR)
+DEFAULT_MUSIC_DIR = str(MEDIA_DIR)
 
 
 class MusicPlayer:
@@ -37,7 +36,7 @@ class MusicPlayer:
         tracks = self._scan_music()
         if not tracks:
             self.current_track = "No track playing"
-            return "No audio files found in music directory. Add .mp3/.wav files into assets/music/."
+            return f"No audio files found in music directory. Add audio files into {self.music_dir}."
 
         random.shuffle(tracks)
         self.playlist = tracks

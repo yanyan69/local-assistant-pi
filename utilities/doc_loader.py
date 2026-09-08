@@ -1,8 +1,9 @@
 # doc_loader.py
 import os
+from core.app_config import KNOWLEDGE_BASE_DIR
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DEFAULT_KB_DIR = os.path.join(BASE_DIR, "knowledge_base")
+DEFAULT_KB_DIR = str(KNOWLEDGE_BASE_DIR)
 
 class LocalDocChunker:
     def __init__(self, kb_dir=DEFAULT_KB_DIR, chunk_size=350, chunk_overlap=50):

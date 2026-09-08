@@ -1,8 +1,10 @@
 # robot.py
 import json
 import re
+import importlib
 from typing import Callable, Dict, Any, Tuple, List, Optional
 from datetime import datetime
+from core.app_config import PERSONA_MODULE
 
 # --- UTILITIES IMPORT (SEARCH ENGINE FALLBACK) ---
 try:
@@ -13,12 +15,13 @@ except Exception:
     search_engine = None
 
 
-# --- MANUAL PERSONA SELECTION ---
-# Edit only this import line to choose which persona file is active.
-# Example:
-#   from persona.persona import SYSTEM_PROMPTS, ROBOT_NAME
-#   from persona.reze_persona import SYSTEM_PROMPTS, ROBOT_NAME
-from persona.reze_persona import SYSTEM_PROMPTS, ROBOT_NAME, PERSONA_AVATAR
+try:
+    _persona = importlib.import_module(PERSONA_MODULE)
+    SYSTEM_PROMPTS = _persona.SYSTEM_PROMPTS
+    ROBOT_NAME = _persona.ROBOT_NAME
+    PERSONA_AVATAR = getattr(_persona, "PERSONA_AVATAR", None)
+except (ImportError, AttributeError) as error:
+    raise RuntimeError(f"Could not load configured persona module '{PERSONA_MODULE}': {error}") from error
 
 DEFAULT_PERSONA = {
     "casual": (
@@ -40,7 +43,7 @@ DEFAULT_PERSONA = {
     )
 }
 
-print(f"[SYSTEM INFO]: Loaded persona '{ROBOT_NAME}' from persona/persona.py")
+print(f"[SYSTEM INFO]: Loaded persona '{ROBOT_NAME}' from {PERSONA_MODULE}")
 
 
 # --- PRE-COMPILED REGEX PATTERNS ---
@@ -71,6 +74,10 @@ CONVERSATIONAL_EXCLUSIONS = {
 
 # --- EXPANDED HARDWARE & MEDIA INTENT PATTERNS ---
 HARDWARE_PATTERNS = {
+    "MEDIA_PLAY": re.compile(
+        r'^\s*play\s+.+$',
+        re.IGNORECASE
+    ),
     "LED_ON": re.compile(
         r'\b(turn|switch|power|put)\b.*\b(on)\b.*\b(light|lights|led)\b|\b(light|lights|led)\b.*\b(on)\b',
         re.IGNORECASE
@@ -89,6 +96,18 @@ HARDWARE_PATTERNS = {
     ),
     "MUSIC_NEXT": re.compile(
         r'\b(next|skip)\b.*\b(song|track|music)\b|\b(next|skip)\b$',
+        re.IGNORECASE
+    ),
+    "MUSIC_PREVIOUS": re.compile(
+        r'\b(previous|prev|back)\b.*\b(song|track|music)\b|\b(previous|prev)\b$',
+        re.IGNORECASE
+    ),
+    "MUSIC_PAUSE": re.compile(
+        r'\b(pause|freeze)\b.*\b(music|song|audio|track|playing)\b|^\s*pause\s*$',
+        re.IGNORECASE
+    ),
+    "MUSIC_RESUME": re.compile(
+        r'\b(resume|continue|unpause)\b.*\b(music|song|audio|track|playing)\b|^\s*(resume|continue|unpause)\s*$',
         re.IGNORECASE
     ),
     "MUSIC_STOP": re.compile(
@@ -162,9 +181,13 @@ def detect_hardware_intent(query: str) -> Optional[Tuple[str, str]]:
             responses = {
                 "LED_ON": "Turning the lights on.",
                 "LED_OFF": "Switching the lights off.",
+                "MEDIA_PLAY": "Searching Jellyfin for that media.",
                 "MUSIC_ON": "Starting music playback.",
                 "MUSIC_SHUFFLE": "Shuffling and playing your music.",
                 "MUSIC_NEXT": "Skipping to the next track.",
+                "MUSIC_PREVIOUS": "Going back to the previous track.",
+                "MUSIC_PAUSE": "Pausing playback.",
+                "MUSIC_RESUME": "Resuming playback.",
                 "MUSIC_STOP": "Stopping music playback.",
                 "SYS_TEMP": "Checking system temperature."
             }
@@ -650,10 +673,6 @@ def process_robot_request(
             ai_response = "Careful, flattery makes me generous. What are we doing next?"
         else:
             ai_response = "I heard you. What should we tackle next?"
-
-    if memory_store is not None:
-        memory_store.add_memory("user", user_query)
-        memory_store.add_memory("assistant", ai_response)
 
     updated_history = (client_history + [(user_query, ai_response)])[-3:]
 

@@ -3,9 +3,10 @@ import os
 import re
 import sqlite3
 from typing import List, Dict, Any
+from core.app_config import KNOWLEDGE_DB_PATH
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DB_PATH = os.path.join(BASE_DIR, "data", "knowledge_base.db")
+DB_PATH = str(KNOWLEDGE_DB_PATH)
 
 class OfflineSearchEngine:
     def __init__(self, db_path: str = DB_PATH):

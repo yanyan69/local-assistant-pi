@@ -3,11 +3,12 @@ import sqlite3
 import threading
 from pathlib import Path
 from typing import List
+from .app_config import MEMORY_DB_PATH
 
-DEFAULT_MEMORY_DB = Path(__file__).resolve().parent.parent / "data" / "local_memory.db"
+DEFAULT_MEMORY_DB = MEMORY_DB_PATH
 
 class LocalMemoryStore:
-    """Simple SQLite-backed memory store for local chat history and notes."""
+    """SQLite-backed durable facts and bounded summaries, not full chat transcripts."""
 
     def __init__(self, db_path: str = str(DEFAULT_MEMORY_DB)):
         self.db_path = db_path
@@ -64,6 +65,15 @@ class LocalMemoryStore:
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_category ON facts(category)")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS conversation_summaries (
+                    conversation_id TEXT PRIMARY KEY,
+                    summary TEXT NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
             conn.commit()
 
     def add_memory(self, role: str, content: str) -> None:
@@ -99,15 +109,52 @@ class LocalMemoryStore:
             lines.append("Durable user facts:")
             lines.extend(f"- {fact['content']}" for fact in facts)
 
-        if not history:
+        summaries = self.get_conversation_summaries(limit=4)
+        if summaries:
+            lines.append("Conversation summaries:")
+            lines.extend(f"- {summary}" for summary in summaries)
+        elif not history:
             return "\n".join(lines) if lines else "No local memory saved yet."
 
-        lines.append("Recent conversation:")
-        for item in history:
-            role = item.get("role", "user")
-            content = item.get("content", "")
-            lines.append(f"{role.title()}: {content}")
+        if not summaries:
+            lines.append("Recent conversation:")
+            for item in history:
+                role = item.get("role", "user")
+                content = item.get("content", "")
+                lines.append(f"{role.title()}: {content}")
         return "\n".join(lines)[:max_chars]
+
+    def save_conversation_summary(self, conversation_id: str, messages: List[dict], max_chars: int = 600) -> None:
+        if not conversation_id:
+            return
+        recent = []
+        for message in messages[-6:]:
+            role = str(message.get("role", "")).strip().title()
+            content = str(message.get("content", "")).strip()
+            if role and content:
+                recent.append(f"{role}: {content}")
+        summary = "\n".join(recent)[-max_chars:]
+        with self._lock:
+            conn = self._connect()
+            conn.execute(
+                """
+                INSERT INTO conversation_summaries(conversation_id, summary, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(conversation_id) DO UPDATE SET
+                    summary = excluded.summary,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (conversation_id, summary),
+            )
+            conn.commit()
+
+    def get_conversation_summaries(self, limit: int = 4) -> List[str]:
+        with self._lock:
+            rows = self._connect().execute(
+                "SELECT summary FROM conversation_summaries WHERE summary <> '' ORDER BY updated_at DESC LIMIT ?",
+                (max(1, int(limit)),),
+            ).fetchall()
+        return [row["summary"] for row in rows]
 
     def add_fact(self, content: str, category: str = "general") -> None:
         value = str(content or "").strip()
@@ -148,4 +195,5 @@ class LocalMemoryStore:
             conn = self._connect()
             conn.execute("DELETE FROM memories")
             conn.execute("DELETE FROM facts")
+            conn.execute("DELETE FROM conversation_summaries")
             conn.commit()

@@ -25,20 +25,33 @@ os.environ["LLAMA_LOG_LEVEL"] = "ERROR"
 from llama_cpp import Llama
 from web_ui import get_chat_html
 from robot import process_robot_request
-from core.app_config import SETTINGS_PATH, build_runtime_config, load_settings, save_settings
+from core.app_config import (
+    JELLYFIN_TOKEN,
+    JELLYFIN_URL,
+    KNOWLEDGE_DB_PATH,
+    MEDIA_DIR,
+    MODEL_PATH as CONFIG_MODEL_PATH,
+    SERVER_PORT as CONFIG_SERVER_PORT,
+    VOICE_ENABLED,
+    build_runtime_config,
+    config_value,
+    load_settings,
+)
 from core.local_memory import LocalMemoryStore
+from core.conversations import ConversationStore
 from robot import ROBOT_NAME, PERSONA_AVATAR
 from core.system_context import read_system_context
 from core.tools import TOOL_SCHEMAS, execute_tool
 from core.backup import create_state_backup
+from hardware.hardware_manager import hw_manager
+from voice.transcriber import WhisperCppTranscriber
 
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_MODEL_PATH = os.path.join(PROJECT_ROOT, "data", "Llama-3.2-1B-Instruct.Q4_K_M.gguf")
-MODEL_PATH = os.path.abspath(os.getenv("LOCAL_ASSISTANT_MODEL", DEFAULT_MODEL_PATH))
-DB_PATH = os.path.join(PROJECT_ROOT, "data", "knowledge_base.db")
-RUNTIME_CONFIG = build_runtime_config(os.getenv("LOCAL_ASSISTANT_MODE", "balanced"))
-SERVER_PORT = int(os.getenv("LOCAL_ASSISTANT_PORT", os.getenv("PORT", "5000")))
+MODEL_PATH = str(CONFIG_MODEL_PATH)
+DB_PATH = str(KNOWLEDGE_DB_PATH)
+RUNTIME_CONFIG = build_runtime_config(str(config_value("MODE", "balanced", ["LOCAL_ASSISTANT_MODE"])))
+SERVER_PORT = CONFIG_SERVER_PORT
 SETTINGS = RUNTIME_CONFIG["settings"]
 PROACTIVE_STATE = {"last_key": None}
 METRICS_LOCK = threading.Lock()
@@ -56,6 +69,8 @@ METRICS = {
 llm: Llama = None
 llm_lock = asyncio.Lock()
 memory_store = LocalMemoryStore(RUNTIME_CONFIG["memory_db_path"])
+conversation_store = ConversationStore()
+voice_transcriber = WhisperCppTranscriber()
 
 
 def is_allowed_command(command: str) -> bool:
@@ -293,11 +308,14 @@ async def status_endpoint():
         "platform": RUNTIME_CONFIG["platform"],
         "raspberry_pi": RUNTIME_CONFIG["is_raspberry_pi"],
         "safe_execution": RUNTIME_CONFIG["safe_execution"],
+        "jellyfin_enabled": bool(JELLYFIN_URL and JELLYFIN_TOKEN),
+        "voice_enabled": VOICE_ENABLED,
+        "voice_configured": voice_transcriber.configured,
+        "media_directory": str(MEDIA_DIR),
         "threads": RUNTIME_CONFIG["n_threads"],
         "context": RUNTIME_CONFIG["n_ctx"],
         "persona_name": ROBOT_NAME,
         "persona_avatar": PERSONA_AVATAR,
-        "settings": SETTINGS,
         "system_context": context,
         "metrics": METRICS,
         "port": SERVER_PORT,
@@ -313,7 +331,7 @@ async def health_endpoint():
         "model_loaded": llm is not None,
         "knowledge_database": os.path.exists(DB_PATH),
         "memory_database": os.path.exists(RUNTIME_CONFIG["memory_db_path"]),
-        "settings_file": SETTINGS_PATH.exists(),
+        "conversation_directory": conversation_store.directory.exists(),
         "metrics": metrics,
     }
 
@@ -324,9 +342,55 @@ async def metrics_endpoint():
         return dict(METRICS)
 
 
+@app.get("/api/conversations")
+async def conversations_endpoint():
+    return {"conversations": conversation_store.list()}
+
+
+@app.post("/api/conversations")
+async def create_conversation_endpoint(request: Request):
+    data = await request.json()
+    title = data.get("title", "New chat") if isinstance(data, dict) else "New chat"
+    return conversation_store.create(title)
+
+
+@app.get("/api/conversations/{conversation_id}")
+async def get_conversation_endpoint(conversation_id: str):
+    conversation = conversation_store.get(conversation_id)
+    if not conversation:
+        return {"status": "error", "message": "Conversation not found."}
+    return conversation
+
+
 @app.get("/api/tools")
 async def tools_endpoint():
     return {"tools": TOOL_SCHEMAS}
+
+
+@app.get("/api/voice/status")
+async def voice_status_endpoint():
+    return {
+        "enabled": VOICE_ENABLED,
+        "configured": voice_transcriber.configured,
+        "backend": "whisper.cpp",
+        "language": voice_transcriber.language,
+    }
+
+
+@app.post("/api/voice/transcribe")
+async def voice_transcribe_endpoint(request: Request):
+    if not VOICE_ENABLED:
+        return {"status": "disabled", "message": "Voice input is disabled in local-ai.config."}
+    try:
+        audio = await request.body()
+        content_type = request.headers.get("content-type", "audio/webm")
+        suffix = ".wav" if "wav" in content_type else ".webm"
+        text = await asyncio.get_running_loop().run_in_executor(
+            None, voice_transcriber.transcribe_bytes, audio, suffix
+        )
+        return {"status": "ok", "text": text}
+    except Exception as error:
+        return {"status": "error", "message": str(error)}
 
 
 @app.post("/api/tools/{tool_name}")
@@ -338,24 +402,6 @@ async def tool_endpoint(tool_name: str, request: Request):
 @app.post("/api/backup")
 async def backup_endpoint():
     return create_state_backup()
-
-
-@app.get("/api/settings")
-async def settings_endpoint():
-    return SETTINGS
-
-
-@app.put("/api/settings")
-async def update_settings_endpoint(request: Request):
-    global SETTINGS
-    updates = await request.json()
-    if not isinstance(updates, dict):
-        return {"status": "error", "message": "Settings must be a JSON object."}
-    previous_power_saving = bool(SETTINGS.get("power_saving_mode"))
-    SETTINGS = save_settings(updates)
-    RUNTIME_CONFIG["settings"] = SETTINGS
-    restart_required = previous_power_saving != bool(SETTINGS.get("power_saving_mode"))
-    return {"status": "ok", "settings": SETTINGS, "restart_required": restart_required}
 
 
 @app.get("/api/proactive")
@@ -393,6 +439,19 @@ async def proactive_endpoint():
 @app.post("/api/robot")
 async def robot_endpoint(request: Request):
     data = await request.json()
+    conversation_id = data.get("conversation_id")
+    conversation = conversation_store.get(conversation_id) if conversation_id else None
+    if conversation is None:
+        conversation = conversation_store.create()
+        conversation_id = conversation["id"]
+    persisted_messages = conversation.get("messages", [])
+    if persisted_messages:
+        data["history"] = [
+            (persisted_messages[index]["content"], persisted_messages[index + 1]["content"])
+            for index in range(0, len(persisted_messages) - 1, 2)
+            if persisted_messages[index].get("role") == "user"
+            and persisted_messages[index + 1].get("role") == "assistant"
+        ][-3:]
     data["system_context"] = read_system_context(SETTINGS)
     data["power_saving_mode"] = bool(SETTINGS.get("power_saving_mode"))
     data["system_awareness"] = SETTINGS.get("system_awareness", "basic")
@@ -441,6 +500,19 @@ async def robot_endpoint(request: Request):
 
             elapsed_ms = (time.perf_counter() - started_at) * 1000
             response_text = result_dict.get("response", "")
+            hardware_cmd = result_dict.get("hardware_cmd", "NONE")
+            if hardware_cmd != "NONE":
+                action_result = await loop.run_in_executor(
+                    None,
+                    hw_manager.execute_command,
+                    hardware_cmd,
+                    data.get("query", ""),
+                )
+                response_text = action_result
+            conversation_store.append(conversation_id, "user", data.get("query", ""))
+            conversation = conversation_store.append(conversation_id, "assistant", response_text)
+            if conversation:
+                memory_store.save_conversation_summary(conversation_id, conversation.get("messages", []))
             with METRICS_LOCK:
                 completed = METRICS["completed"] + 1
                 METRICS["completed"] = completed
@@ -453,8 +525,9 @@ async def robot_endpoint(request: Request):
 
             payload = {
                 "response": response_text,
-                "hardware_cmd": result_dict.get("hardware_cmd", "NONE"),
+                "hardware_cmd": hardware_cmd,
                 "history": result_dict.get("history", []),
+                "conversation_id": conversation_id,
                 "status": status_code
             }
 

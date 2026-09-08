@@ -13,3 +13,5 @@ data/backups/
 .vscode/
 
 data/local_memory.db
+data/conversations/
+local-ai.config

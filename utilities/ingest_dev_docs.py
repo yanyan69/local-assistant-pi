@@ -8,11 +8,12 @@ import urllib.parse
 import json
 import re
 import sqlite3
+from core.app_config import BUILD_DIR as CONFIG_BUILD_DIR, KNOWLEDGE_BASE_DIR, KNOWLEDGE_DB_PATH
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-KB_DIR = os.path.join(BASE_DIR, "knowledge_base")
-BUILD_DIR = os.path.join(BASE_DIR, "build_tmp")
-DB_PATH = os.path.join(BASE_DIR, "data", "knowledge_base.db")
+KB_DIR = str(KNOWLEDGE_BASE_DIR)
+BUILD_DIR = str(CONFIG_BUILD_DIR)
+DB_PATH = str(KNOWLEDGE_DB_PATH)
 
 
 def prepare_directories():
@@ -241,7 +242,7 @@ def split_document(content: str, max_chars: int = 2400):
 
 
 def populate_sqlite_database():
-    """Reads `./knowledge_base/` and rebuilds the SQLite paragraph and FTS5 indexes."""
+    """Reads the configured knowledge directory and rebuilds SQLite paragraph and FTS5 indexes."""
     print("[*] Indexing local files into SQLite database...")
     init_db()
 
@@ -278,7 +279,7 @@ def populate_sqlite_database():
 
         conn.commit()
 
-    print(f"[+] Successfully saved {inserted_count} files into `data/knowledge_base.db`.")
+    print(f"[+] Successfully saved {inserted_count} files into `{DB_PATH}`.")
     rebuild_fts_index()
 
 
@@ -330,4 +331,4 @@ if __name__ == "__main__":
     fetch_open_knowledge_sources()
     populate_sqlite_database()
     cleanup()
-    print("\n[+] Ingestion complete! SQLite database updated at `./data/knowledge_base.db`.")
+    print(f"\n[+] Ingestion complete! SQLite database updated at `{DB_PATH}`.")

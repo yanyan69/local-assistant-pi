@@ -71,13 +71,29 @@ def get_chat_html():
                 width: 52px;
                 padding-left: 6px;
                 padding-right: 6px;
+                gap: 0;
+            }
+
+            .sidebar.collapsed > :not(.brand) {
+                display: none;
+            }
+
+            .sidebar.collapsed .brand {
+                justify-content: center;
+                gap: 0;
+                padding: 0;
+                border-bottom: 0;
+            }
+
+            .sidebar.collapsed .brand > :not(.sidebar-toggle) {
+                display: none;
             }
 
             .sidebar.collapsed .brand-title,
             .sidebar.collapsed .brand-avatar,
             .sidebar.collapsed .sidebar-card,
             .sidebar.collapsed .quick-actions,
-            .sidebar.collapsed .sidebar-btn:not(.settings-btn),
+            .sidebar.collapsed .sidebar-btn,
             .sidebar.collapsed .music-card,
             .sidebar.collapsed .system-info,
             .sidebar.collapsed .settings-label-bar,
@@ -86,7 +102,7 @@ def get_chat_html():
             .sidebar.is-animating .brand-title,
             .sidebar.is-animating .sidebar-card,
             .sidebar.is-animating .quick-actions,
-            .sidebar.is-animating .sidebar-btn:not(.settings-btn),
+            .sidebar.is-animating .sidebar-btn,
             .sidebar.is-animating .music-card,
             .sidebar.is-animating .system-info,
             .sidebar.is-animating .settings-label-bar,
@@ -212,19 +228,24 @@ def get_chat_html():
                 margin-top: 2px;
             }
 
-            .status-dot {
-                width: 7px;
-                height: 7px;
-                border-radius: 50%;
-                background: #37d67a;
-                box-shadow: 0 0 10px rgba(55, 214, 122, 0.8);
+                width: 100%;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                border: 0;
+                border-radius: 8px;
+                background: transparent;
+                color: var(--text-soft);
+                cursor: pointer;
+                padding: 8px;
+                text-align: left;
+                font-size: 12px;
             }
 
-            .sidebar-card {
-                background: rgba(255, 255, 255, 0.03);
-                border: 1px solid var(--border-color);
-                border-radius: var(--radius-md);
-                padding: 12px 12px;
+            .conversation-item:hover,
+            .conversation-item.active {
+                background: rgba(124, 156, 255, 0.14);
+                color: var(--text-main);
             }
 
             .profile-mini {
@@ -302,43 +323,6 @@ def get_chat_html():
             .sidebar-btn:hover {
                 background: rgba(124, 156, 255, 0.14);
                 transform: translateY(-1px);
-            }
-
-            .settings-btn {
-                width: 40px;
-                height: 40px;
-                min-height: 40px;
-                flex: 0 0 40px;
-                display: grid;
-                place-items: center;
-                padding: 0;
-                justify-content: center;
-            }
-
-            .settings-slot {
-                width: 100%;
-                min-height: 40px;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }
-
-            .settings-label-bar {
-                flex: 1 1 auto;
-                min-width: 0;
-                height: 40px;
-                display: flex;
-                align-items: center;
-                padding: 0 8px;
-                border: 0;
-                border-radius: 0;
-                background: transparent;
-                color: var(--text-main);
-                font-size: 13px;
-                white-space: nowrap;
-                overflow: hidden;
-                opacity: 1;
-                transition: opacity 0.16s ease, flex-basis 0.26s ease;
             }
 
             .quick-actions {
@@ -779,37 +763,6 @@ def get_chat_html():
                 font-size: 18px;
             }
 
-            .settings-modal {
-                position: fixed;
-                inset: 0;
-                z-index: 40;
-                display: grid;
-                place-items: center;
-                padding: 20px;
-                background: rgba(3, 6, 12, 0.7);
-            }
-
-            .settings-modal[hidden] { display: none; }
-
-            .settings-dialog {
-                width: min(100%, 390px);
-                display: grid;
-                gap: 16px;
-                padding: 20px;
-                border: 1px solid var(--border-color);
-                border-radius: 16px;
-                background: var(--bg-panel);
-                box-shadow: var(--shadow-soft);
-            }
-
-            .settings-dialog-header { display: flex; justify-content: space-between; align-items: center; }
-            .settings-dialog-header h2 { font-size: 18px; }
-            .settings-dialog-header button { border: 0; background: transparent; color: var(--text-main); font-size: 24px; cursor: pointer; }
-            .settings-dialog label { display: grid; gap: 7px; color: var(--text-soft); font-size: 13px; }
-            .settings-dialog select { padding: 9px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-input); color: var(--text-main); }
-            .settings-dialog .setting-check { display: flex; grid-template-columns: auto 1fr; align-items: center; gap: 9px; }
-            .settings-note { color: var(--text-muted); font-size: 12px; line-height: 1.4; }
-
             .input-box-wrapper {
                 max-width: 860px;
                 width: 100%;
@@ -873,6 +826,30 @@ def get_chat_html():
                 opacity: 0.5;
                 cursor: not-allowed;
                 transform: none;
+            }
+
+            .voice-btn {
+                width: 42px;
+                height: 42px;
+                border: 1px solid var(--border-color);
+                border-radius: 12px;
+                background: rgba(255,255,255,0.04);
+                color: var(--text-soft);
+                display: grid;
+                place-items: center;
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+
+            .voice-btn.recording {
+                color: #ff9a9a;
+                border-color: rgba(255, 110, 110, 0.75);
+                background: rgba(255, 90, 90, 0.14);
+            }
+
+            .voice-btn:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
             }
 
             .cursor {
@@ -997,17 +974,22 @@ def get_chat_html():
                     </div>
                 </div>
 
-                <button class="sidebar-btn" onclick="resetChat()">
+                <button class="sidebar-btn" onclick="startNewChat()">
                     <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                     <span class="label">New chat</span>
                 </button>
+
+                <div class="sidebar-card conversation-card">
+                    <div class="mini-meta"><strong>Chat history</strong></div>
+                    <div class="conversation-list" id="conversationList"></div>
+                </div>
 
                 <div class="music-card">
                     <div class="music-art">♫</div>
                     <div class="music-info">
                         <span class="music-label">Now playing</span>
                         <strong class="music-track" id="currentTrackLabel">No track playing</strong>
-                        <span class="music-folder" id="musicFolderLabel">assets/music</span>
+                        <span class="music-folder" id="musicFolderLabel">Configured media directory</span>
                     </div>
                 </div>
 
@@ -1021,12 +1003,6 @@ def get_chat_html():
                     <strong>Latency:</strong> <span id="runtimeLatency">Checking...</span>
                 </div>
 
-                <div class="settings-slot">
-                    <button class="sidebar-btn settings-btn" onclick="openSettings()" aria-label="Settings">
-                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m19.4 15 .1.1a2 2 0 0 1-2.8 2.8l-.1-.1a2 2 0 0 0-3.4 1.4V19a2 2 0 0 1-4 0v-.1a2 2 0 0 0-3.4-1.4l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1A2 2 0 0 0 1.6 11H1.5a2 2 0 0 1 0-4h.1A2 2 0 0 0 3 3.6l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1A2 2 0 0 0 9.2 0V0a2 2 0 0 1 4 0v.1a2 2 0 0 0 3.4 1.4l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1A2 2 0 0 0 20.8 7h.1a2 2 0 0 1 0 4h-.1a2 2 0 0 0-1.4 3.4Z"/></svg>
-                    </button>
-                    <span class="settings-label-bar">Settings</span>
-                </div>
             </aside>
 
             <main class="main-content">
@@ -1059,6 +1035,9 @@ def get_chat_html():
                     <div class="input-box-wrapper">
                         <div class="input-box">
                             <textarea id="userInput" rows="1" placeholder="Message the assistant..." oninput="autoResize(this)" onkeydown="handleKeyDown(event)"></textarea>
+                            <button class="voice-btn" id="voiceBtn" onclick="toggleVoiceInput()" aria-label="Speak to assistant" title="Speak to assistant">
+                                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 10v2a7 7 0 0 1-14 0v-2m7 9v3m-4 0h8"/></svg>
+                            </button>
                             <button class="send-btn" id="sendBtn" onclick="sendMsg()" aria-label="Send message">
                                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>
                             </button>
@@ -1068,22 +1047,13 @@ def get_chat_html():
             </main>
         </div>
 
-        <div class="settings-modal" id="settingsModal" hidden>
-            <div class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-                <div class="settings-dialog-header"><h2 id="settingsTitle">Assistant settings</h2><button onclick="closeSettings()" aria-label="Close settings">×</button></div>
-                <label>System awareness <select id="awarenessSetting"><option value="off">Off</option><option value="basic">Basic</option><option value="full">Full</option></select></label>
-                <label class="setting-check"><input type="checkbox" id="powerSavingSetting"> Power-saving mode</label>
-                <label class="setting-check"><input type="checkbox" id="proactiveSetting"> Proactive messages</label>
-                <p class="settings-note">Proactive checks run every 60 seconds while enabled.</p>
-                <button class="sidebar-btn" onclick="saveSettings()">Save settings</button>
-                <button class="sidebar-btn" onclick="backupState()">Backup local state</button>
-            </div>
-        </div>
-
         <script>
             let chatHistory = [];
+            let mediaDirectory = 'Configured media directory';
+            let conversationId = null;
             let isGenerating = false;
-            let assistantSettings = JSON.parse(localStorage.getItem('assistantSettings') || '{}');
+            let voiceRecorder = null;
+            let voiceChunks = [];
 
             function toggleMobileSidebar() {
                 const sidebar = document.getElementById('sidebar');
@@ -1111,63 +1081,14 @@ def get_chat_html():
                     if (avatarUrl) element.innerHTML = `<img src="${avatarUrl}" alt="${name} avatar">`;
                     else element.textContent = name.slice(0, 2).toUpperCase();
                 });
-            }
-
-            function openSettings() {
-                const modal = document.getElementById('settingsModal');
-                if (!modal) return;
-                document.getElementById('awarenessSetting').value = assistantSettings.system_awareness || 'basic';
-                document.getElementById('powerSavingSetting').checked = Boolean(assistantSettings.power_saving_mode);
-                document.getElementById('proactiveSetting').checked = Boolean(assistantSettings.proactive_mode);
-                modal.hidden = false;
-            }
-
-            function closeSettings() {
-                const modal = document.getElementById('settingsModal');
-                if (modal) modal.hidden = true;
-            }
-
-            async function saveSettings() {
-                assistantSettings = {
-                    ...assistantSettings,
-                    system_awareness: document.getElementById('awarenessSetting').value,
-                    power_saving_mode: document.getElementById('powerSavingSetting').checked,
-                    proactive_mode: document.getElementById('proactiveSetting').checked,
-                    proactive_interval_seconds: 60
-                };
-                localStorage.setItem('assistantSettings', JSON.stringify(assistantSettings));
-                try {
-                    const response = await fetch('/api/settings', {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(assistantSettings)
-                    });
-                    if (!response.ok) throw new Error('settings save failed');
-                    const data = await response.json();
-                    assistantSettings = data.settings || assistantSettings;
-                    localStorage.setItem('assistantSettings', JSON.stringify(assistantSettings));
-                    if (data.restart_required) alert('Power-saving runtime settings will apply after restarting the assistant.');
-                } catch (error) {
-                    console.error('Settings save error:', error);
-                }
-                closeSettings();
-                loadRuntimeStatus();
-            }
-
-            async function backupState() {
-                try {
-                    const response = await fetch('/api/backup', { method: 'POST' });
-                    if (!response.ok) throw new Error('backup failed');
-                    const data = await response.json();
-                    alert(data.created?.length ? 'Local state backed up.' : 'No state files were available to back up.');
-                } catch (error) {
-                    console.error('Backup error:', error);
-                    alert('Local backup failed.');
+                const voiceBtn = document.getElementById('voiceBtn');
+                if (voiceBtn && (!data.voice_enabled || !data.voice_configured)) {
+                    voiceBtn.disabled = true;
+                    voiceBtn.title = 'Enable and configure local voice in local-ai.config';
                 }
             }
 
             async function pollProactiveMessage() {
-                if (!assistantSettings.proactive_mode || assistantSettings.power_saving_mode) return;
                 try {
                     const response = await fetch('/api/proactive');
                     if (!response.ok) return;
@@ -1178,14 +1099,84 @@ def get_chat_html():
                 }
             }
 
-            function setCurrentTrack(title, folder = 'assets/music') {
+            function renderConversationList(conversations) {
+                const list = document.getElementById('conversationList');
+                if (!list) return;
+                list.innerHTML = '';
+                conversations.forEach((conversation) => {
+                    const button = document.createElement('button');
+                    button.className = `conversation-item${conversation.id === conversationId ? ' active' : ''}`;
+                    button.textContent = conversation.title || 'New chat';
+                    button.title = conversation.title || 'New chat';
+                    button.onclick = () => openConversation(conversation.id);
+                    list.appendChild(button);
+                });
+            }
+
+            async function loadConversations() {
+                try {
+                    const response = await fetch('/api/conversations');
+                    const data = await response.json();
+                    renderConversationList(data.conversations || []);
+                    if (!conversationId && data.conversations?.length) {
+                        await openConversation(data.conversations[0].id);
+                    } else if (!conversationId) {
+                        await startNewChat();
+                    }
+                } catch (error) {
+                    console.error('Conversation list error:', error);
+                }
+            }
+
+            function renderConversation(conversation) {
+                conversationId = conversation.id;
+                chatHistory = [];
+                const box = document.getElementById('chatContainer');
+                box.innerHTML = '';
+                (conversation.messages || []).forEach((message) => {
+                    appendMsg(message.content, message.role === 'user' ? 'user' : 'bot');
+                    if (message.role === 'user') chatHistory.push([message.content, '']);
+                    else if (chatHistory.length) chatHistory[chatHistory.length - 1][1] = message.content;
+                });
+                if (!conversation.messages?.length) {
+                    appendMsg('System initialized and running locally. Ask for code, Linux help, or hardware control.', 'bot');
+                }
+                chatHistory = chatHistory.filter((pair) => pair[0] && pair[1]).slice(-3);
+            }
+
+            async function openConversation(id) {
+                if (isGenerating) return;
+                const response = await fetch(`/api/conversations/${encodeURIComponent(id)}`);
+                if (!response.ok) return;
+                const conversation = await response.json();
+                if (conversation.status === 'error') return;
+                renderConversation(conversation);
+                const listResponse = await fetch('/api/conversations');
+                renderConversationList((await listResponse.json()).conversations || []);
+            }
+
+            async function startNewChat() {
+                if (isGenerating) return;
+                const response = await fetch('/api/conversations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: 'New chat' })
+                });
+                if (!response.ok) return;
+                const conversation = await response.json();
+                renderConversation(conversation);
+                const listResponse = await fetch('/api/conversations');
+                renderConversationList((await listResponse.json()).conversations || []);
+            }
+
+            function setCurrentTrack(title, folder = mediaDirectory) {
                 const trackLabel = document.getElementById('currentTrackLabel');
                 const folderLabel = document.getElementById('musicFolderLabel');
                 const musicCard = document.querySelector('.music-card');
                 const isPlaying = !!(title && title !== 'No track playing');
 
                 if (trackLabel) trackLabel.textContent = title || 'No track playing';
-                if (folderLabel) folderLabel.textContent = folder || 'assets/music';
+                if (folderLabel) folderLabel.textContent = folder || mediaDirectory;
 
                 if (musicCard) {
                     musicCard.classList.toggle('hidden', !isPlaying);
@@ -1195,6 +1186,11 @@ def get_chat_html():
             function toggleSidebar() {
                 const sidebar = document.getElementById('sidebar');
                 if (!sidebar) return;
+
+                if (window.matchMedia('(max-width: 760px)').matches) {
+                    sidebar.classList.remove('collapsed', 'mobile-open', 'is-animating');
+                    return;
+                }
 
                 const shouldCollapse = !sidebar.classList.contains('collapsed');
                 sidebar.classList.add('is-animating');
@@ -1247,8 +1243,9 @@ def get_chat_html():
                     });
                 });
 
-                setCurrentTrack('No track playing', 'assets/music');
+                setCurrentTrack('No track playing');
                 loadRuntimeStatus();
+                loadConversations();
                 window.setInterval(pollProactiveMessage, 60000);
             });
 
@@ -1264,9 +1261,8 @@ def get_chat_html():
                     const response = await fetch('/api/status');
                     if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                     const data = await response.json();
-                    assistantSettings = { ...data.settings, ...assistantSettings, proactive_interval_seconds: 60 };
-                    localStorage.setItem('assistantSettings', JSON.stringify(assistantSettings));
                     applyPersona(data);
+                    mediaDirectory = data.media_directory || mediaDirectory;
                     const ready = data.status === 'ready';
                     if (statusLabel) statusLabel.textContent = ready ? `${data.persona_name || 'Local AI'} ready` : 'Starting local AI';
                     if (statusDot) statusDot.style.background = ready ? '#37d67a' : '#f5b94a';
@@ -1311,7 +1307,7 @@ def get_chat_html():
                     const res = await fetch('/api/robot', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ query, history: chatHistory })
+                        body: JSON.stringify({ query, history: chatHistory, conversation_id: conversationId })
                     });
 
                     if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -1337,12 +1333,13 @@ def get_chat_html():
                                 const parsed = JSON.parse(rawJson);
                                 if (parsed.delta) appendBotDelta(msgContentEl, parsed.delta);
                                 if (parsed.history) chatHistory = parsed.history;
+                                if (parsed.conversation_id) conversationId = parsed.conversation_id;
                                 if (parsed.response !== undefined) updateBotMsg(msgContentEl, parsed.response, parsed.hardware_cmd || 'NONE');
 
                                 if (parsed.hardware_cmd === 'MUSIC_ON' || parsed.hardware_cmd === 'MUSIC_SHUFFLE' || parsed.hardware_cmd === 'MUSIC_NEXT') {
-                                    setCurrentTrack('Playing local music', 'assets/music');
+                                    setCurrentTrack('Playing local music');
                                 } else if (parsed.hardware_cmd === 'MUSIC_STOP') {
-                                    setCurrentTrack('No track playing', 'assets/music');
+                                    setCurrentTrack('No track playing');
                                 }
                             } catch (err) {
                                 console.error('JSON parse error:', err);
@@ -1369,6 +1366,59 @@ def get_chat_html():
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     sendMsg();
+                }
+            }
+
+            async function toggleVoiceInput() {
+                const voiceBtn = document.getElementById('voiceBtn');
+                if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+                    alert('This browser does not support local microphone recording.');
+                    return;
+                }
+                if (voiceRecorder && voiceRecorder.state === 'recording') {
+                    voiceRecorder.stop();
+                    voiceBtn.classList.remove('recording');
+                    voiceBtn.title = 'Speak to assistant';
+                    return;
+                }
+
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    voiceChunks = [];
+                    voiceRecorder = new MediaRecorder(stream);
+                    voiceRecorder.ondataavailable = (event) => {
+                        if (event.data.size) voiceChunks.push(event.data);
+                    };
+                    voiceRecorder.onstop = async () => {
+                        stream.getTracks().forEach((track) => track.stop());
+                        voiceBtn.disabled = true;
+                        voiceBtn.title = 'Transcribing locally...';
+                        try {
+                            const response = await fetch('/api/voice/transcribe', {
+                                method: 'POST',
+                                headers: { 'Content-Type': voiceRecorder.mimeType || 'audio/webm' },
+                                body: new Blob(voiceChunks, { type: voiceRecorder.mimeType || 'audio/webm' })
+                            });
+                            const data = await response.json();
+                            if (data.status !== 'ok') throw new Error(data.message || 'Voice transcription failed');
+                            const input = document.getElementById('userInput');
+                            input.value = data.text || '';
+                            autoResize(input);
+                            if (input.value.trim()) sendMsg();
+                        } catch (error) {
+                            console.error('Voice input error:', error);
+                            alert(error.message || 'Local voice transcription failed.');
+                        } finally {
+                            voiceBtn.disabled = false;
+                            voiceBtn.title = 'Speak to assistant';
+                        }
+                    };
+                    voiceRecorder.start();
+                    voiceBtn.classList.add('recording');
+                    voiceBtn.title = 'Stop recording';
+                } catch (error) {
+                    console.error('Microphone access error:', error);
+                    alert('Microphone access was not granted.');
                 }
             }
 
@@ -1399,7 +1449,8 @@ def get_chat_html():
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
                             query: query,
-                            history: chatHistory
+                            history: chatHistory,
+                            conversation_id: conversationId
                         })
                     });
 
@@ -1429,6 +1480,7 @@ def get_chat_html():
                                     if (parsed.history) {
                                         chatHistory = parsed.history;
                                     }
+                                    if (parsed.conversation_id) conversationId = parsed.conversation_id;
 
                                     if (parsed.response !== undefined) updateBotMsg(msgContentEl, parsed.response, parsed.hardware_cmd || "NONE");
                                 } catch (err) {
@@ -1450,13 +1502,7 @@ def get_chat_html():
             }
 
             function resetChat() {
-                chatHistory = [];
-                const box = document.getElementById('chatContainer');
-                box.innerHTML = `
-                    <div class="msg-wrapper bot">
-                        <div class="msg-avatar">AI</div>
-                        <div class="msg-content">Chat reset. Ready for new input!</div>
-                    </div>`;
+                startNewChat();
             }
 
             function parseMarkdown(text) {
