@@ -232,6 +232,17 @@ class LocalAssistantConfigurationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("not looking for a specific command", response["response"])
 
+    def test_sample_git_commands_is_not_executed(self):
+        def command_list_llm(prompt, **kwargs):
+            return {"choices": [{"text": "- `git status`\n- `git log`"}]}
+
+        response, status = process_robot_request(
+            {"query": "sample me git commands", "history": []},
+            command_list_llm,
+        )
+        self.assertEqual(status, 200)
+        self.assertIn("git", response["response"])
+
     def test_repeated_casual_reply_is_replaced(self):
         def repeated_llm(*args, **kwargs):
             return {"choices": [{"text": "You're a sly one, always seeing right through my attempts at sass."}]}

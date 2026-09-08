@@ -197,7 +197,9 @@ def detect_hardware_intent(query: str) -> Optional[Tuple[str, str]]:
 
 def is_execution_request(query: str) -> bool:
     lower = (query or "").lower()
-    return bool(re.search(r"\b(run|execute|start|check|show|list)\b", lower))
+    if re.search(r"\b(?:sample|give|show|list|explain|teach|tell|what are|how do)\b.*\b(?:command|commands|git|linux|usage|examples?)\b", lower):
+        return False
+    return bool(re.search(r"\b(run|execute|check|inspect|find|search)\b", lower))
 
 
 def build_llama3_prompt(system_prompt: str, context: str, history: List[Tuple[str, str]], query: str, memory_summary: str = "", system_context: Optional[Dict[str, Any]] = None) -> str:
