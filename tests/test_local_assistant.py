@@ -243,6 +243,25 @@ class LocalAssistantConfigurationTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("git", response["response"])
 
+    def test_security_topic_uses_technical_routing(self):
+        searches = []
+
+        def search_database(query):
+            searches.append(query)
+            return "Cybersecurity includes authentication, authorization, and secure updates."
+
+        def knowledge_llm(prompt, **kwargs):
+            return {"choices": [{"text": "Cybersecurity protects systems, data, and users from unauthorized access."}]}
+
+        response, status = process_robot_request(
+            {"query": "teach me about cybersecurity", "history": []},
+            knowledge_llm,
+            search_database=search_database,
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(searches)
+        self.assertIn("Cybersecurity", response["response"])
+
     def test_repeated_casual_reply_is_replaced(self):
         def repeated_llm(*args, **kwargs):
             return {"choices": [{"text": "You're a sly one, always seeing right through my attempts at sass."}]}

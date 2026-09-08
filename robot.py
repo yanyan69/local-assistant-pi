@@ -247,6 +247,8 @@ def process_robot_request(
 
     raw_query = data["query"]
     user_query = sanitize_input(raw_query)
+    if not user_query:
+        return {"response": "Please say or type a question first.", "hardware_cmd": "NONE", "history": data.get("history", [])}, 400
     client_history = data.get("history", [])
     memory_summary = memory_store.get_memory_summary(limit=6) if memory_store else ""
     approved_system_context = data.get("system_context") or {}
@@ -574,6 +576,8 @@ def process_robot_request(
         "sci-fi", "scifi", "science fiction", "marcus aurelius", "meditations", "steins", "gate",
         "attack on titan", "demon slayer", "serial experiments lain", "lelouch", "code geass",
         "mob psycho", "saitama", "one punch man", "saiki"
+        ,"cybersecurity", "cyber security", "networking", "network", "firewall", "encryption",
+        "vulnerability", "vulnerabilities", "authentication", "privacy", "security"
     }
 
     has_technical_intent = any(w in query_lower for w in TECHNICAL_KEYWORDS) or any(trig in query_lower for trig in CODE_TRIGGERS)
