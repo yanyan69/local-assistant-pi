@@ -1334,7 +1334,10 @@ def get_chat_html():
                                 if (parsed.delta) appendBotDelta(msgContentEl, parsed.delta);
                                 if (parsed.history) chatHistory = parsed.history;
                                 if (parsed.conversation_id) conversationId = parsed.conversation_id;
-                                if (parsed.response !== undefined) updateBotMsg(msgContentEl, parsed.response, parsed.hardware_cmd || 'NONE');
+                                if (parsed.response !== undefined) {
+                                    updateBotMsg(msgContentEl, parsed.response, parsed.hardware_cmd || 'NONE');
+                                    speakResponse(parsed.response);
+                                }
 
                                 if (parsed.hardware_cmd === 'MUSIC_ON' || parsed.hardware_cmd === 'MUSIC_SHUFFLE' || parsed.hardware_cmd === 'MUSIC_NEXT') {
                                     setCurrentTrack('Playing local music');
@@ -1490,7 +1493,10 @@ def get_chat_html():
                                     }
                                     if (parsed.conversation_id) conversationId = parsed.conversation_id;
 
-                                    if (parsed.response !== undefined) updateBotMsg(msgContentEl, parsed.response, parsed.hardware_cmd || "NONE");
+                                    if (parsed.response !== undefined) {
+                                        updateBotMsg(msgContentEl, parsed.response, parsed.hardware_cmd || "NONE");
+                                        speakResponse(parsed.response);
+                                    }
                                 } catch (err) {
                                     console.error("JSON parse error:", err);
                                 }
@@ -1506,6 +1512,23 @@ def get_chat_html():
                     inputEl.disabled = false;
                     sendBtn.disabled = false;
                     inputEl.focus();
+                }
+            }
+
+            async function speakResponse(text) {
+                if (!text) return;
+                try {
+                    const response = await fetch('/api/tts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text })
+                    });
+                    if (!response.ok || !(response.headers.get('content-type') || '').includes('audio/')) return;
+                    const audio = new Audio(URL.createObjectURL(await response.blob()));
+                    audio.onended = () => URL.revokeObjectURL(audio.src);
+                    await audio.play();
+                } catch (error) {
+                    console.debug('Local TTS unavailable:', error);
                 }
             }
 

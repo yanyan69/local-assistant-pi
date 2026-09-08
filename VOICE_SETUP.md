@@ -61,3 +61,22 @@ endpoint. A TUI can use the same endpoint or import
 Most browsers require HTTPS before granting microphone access to a LAN address.
 The browser button therefore works on localhost or an HTTPS deployment. A TUI
 can record locally without that browser restriction.
+
+## Offline text to speech
+
+The project supports [Piper](https://github.com/rhasspy/piper), a lightweight
+offline speech synthesizer. Install the Piper executable for the Pi, download
+an ONNX voice model, and configure:
+
+```ini
+TTS_ENABLED=true
+PIPER_PATH=/usr/local/bin/piper
+TTS_MODEL_PATH=/mnt/local-assistant/voices/en_US-lessac-medium.onnx
+TTS_VOICE_DIR=/mnt/local-assistant/voices
+TTS_LENGTH_SCALE=1.0
+```
+
+For a project-local voice library, put the `.onnx` model and its matching
+`.onnx.json` file in `assets/voices/`. Change `TTS_MODEL_PATH` to select a
+different voice. The browser requests `/api/tts` after each completed response
+and plays the returned WAV audio locally.

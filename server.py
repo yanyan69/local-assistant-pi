@@ -33,6 +33,7 @@ from core.app_config import (
     MODEL_PATH as CONFIG_MODEL_PATH,
     SERVER_PORT as CONFIG_SERVER_PORT,
     VOICE_ENABLED,
+    TTS_ENABLED,
     build_runtime_config,
     config_value,
     load_settings,
@@ -45,6 +46,7 @@ from core.tools import TOOL_SCHEMAS, execute_tool
 from core.backup import create_state_backup
 from hardware.hardware_manager import hw_manager
 from voice.transcriber import WhisperCppTranscriber
+from voice.tts import PiperSynthesizer
 
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -71,6 +73,7 @@ llm_lock = asyncio.Lock()
 memory_store = LocalMemoryStore(RUNTIME_CONFIG["memory_db_path"])
 conversation_store = ConversationStore()
 voice_transcriber = WhisperCppTranscriber()
+tts_synthesizer = PiperSynthesizer()
 
 
 def is_allowed_command(command: str) -> bool:
@@ -383,7 +386,22 @@ async def voice_status_endpoint():
         "configured": voice_transcriber.configured,
         "backend": "whisper.cpp",
         "language": voice_transcriber.language,
+        "tts_enabled": TTS_ENABLED,
+        "tts_configured": tts_synthesizer.configured,
     }
+
+
+@app.post("/api/tts")
+async def tts_endpoint(request: Request):
+    if not TTS_ENABLED:
+        return {"status": "disabled", "message": "Text to speech is disabled in local-ai.config."}
+    data = await request.json()
+    text = data.get("text", "") if isinstance(data, dict) else ""
+    try:
+        audio = await asyncio.get_running_loop().run_in_executor(None, tts_synthesizer.synthesize, text)
+        return StreamingResponse(iter([audio]), media_type="audio/wav", headers={"Cache-Control": "no-store"})
+    except Exception as error:
+        return {"status": "error", "message": str(error)}
 
 
 @app.post("/api/voice/transcribe")

@@ -42,6 +42,10 @@ The initial executable/model download requires internet or a separate transfer;
 normal transcription is offline. A browser microphone requires HTTPS or a
 localhost origin in most browsers.
 
+Piper TTS can speak completed responses locally. Set `TTS_ENABLED=true` and
+choose a voice model with `TTS_MODEL_PATH`; voice models can live in
+`assets/voices/` or an external configured directory.
+
 ## Replaceable clients
 
 `web_ui.py` is only the browser client. A future TUI can call the same
