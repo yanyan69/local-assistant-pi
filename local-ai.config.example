@@ -25,5 +25,6 @@ WHISPER_CPP_PATH=whisper-cli
 WHISPER_MODEL_PATH=data/ggml-base.en.bin
 VOICE_LANGUAGE=en
 FFMPEG_PATH=ffmpeg
+WHISPER_NO_SPEECH_THRESHOLD=0.7
 JELLYFIN_URL=
 # Keep JELLYFIN_TOKEN in the environment rather than this file.

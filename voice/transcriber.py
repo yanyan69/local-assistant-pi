@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from core.app_config import FFMPEG_PATH, VOICE_LANGUAGE, WHISPER_CPP_PATH, WHISPER_MODEL_PATH
+from core.app_config import FFMPEG_PATH, VOICE_LANGUAGE, WHISPER_CPP_PATH, WHISPER_MODEL_PATH, WHISPER_NO_SPEECH_THRESHOLD
 
 
 class WhisperCppTranscriber:
@@ -16,11 +16,13 @@ class WhisperCppTranscriber:
         model_path: str = str(WHISPER_MODEL_PATH),
         ffmpeg_path: str = FFMPEG_PATH,
         language: str = VOICE_LANGUAGE,
+        no_speech_threshold: str = WHISPER_NO_SPEECH_THRESHOLD,
     ):
         self.executable = executable
         self.model_path = model_path
         self.ffmpeg_path = ffmpeg_path
         self.language = language
+        self.no_speech_threshold = str(no_speech_threshold)
 
     @property
     def configured(self) -> bool:
@@ -49,7 +51,11 @@ class WhisperCppTranscriber:
                 raise RuntimeError("Could not convert the browser recording to WAV. Install ffmpeg locally.")
 
             result = subprocess.run(
-                [self.executable, "-m", self.model_path, "-f", str(wav_path), "-l", self.language, "--no-timestamps", "-nt"],
+                [
+                    self.executable, "-m", self.model_path, "-f", str(wav_path),
+                    "-l", self.language, "--no-timestamps", "-nt",
+                    "-nth", self.no_speech_threshold, "-sns", "-np",
+                ],
                 capture_output=True,
                 text=True,
                 timeout=120,
@@ -61,9 +67,16 @@ class WhisperCppTranscriber:
 
     @staticmethod
     def _clean_output(output: Optional[str]) -> str:
+        ignored_markers = {
+            "[BLANK_AUDIO]",
+            "[NON-ENGLISH SPEECH]",
+            "[MUSIC]",
+            "[SILENCE]",
+        }
         lines = []
         for line in (output or "").splitlines():
             value = line.strip()
-            if value and not value.startswith("whisper_"):
+            if value and value not in ignored_markers and not value.startswith("whisper_"):
                 lines.append(value)
-        return " ".join(lines).strip()
+        text = " ".join(lines).strip()
+        return "" if text.upper() in ignored_markers else text

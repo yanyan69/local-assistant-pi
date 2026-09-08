@@ -1400,6 +1400,7 @@ def get_chat_html():
                                 body: new Blob(voiceChunks, { type: voiceRecorder.mimeType || 'audio/webm' })
                             });
                             const data = await response.json();
+                            if (data.status === 'empty') return;
                             if (data.status !== 'ok') throw new Error(data.message || 'Voice transcription failed');
                             const input = document.getElementById('userInput');
                             input.value = data.text || '';
