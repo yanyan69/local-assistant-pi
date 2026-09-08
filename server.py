@@ -397,6 +397,8 @@ async def voice_transcribe_endpoint(request: Request):
         text = await asyncio.get_running_loop().run_in_executor(
             None, voice_transcriber.transcribe_bytes, audio, suffix
         )
+        if not text.strip():
+            return {"status": "empty", "text": "", "message": "No clear speech detected."}
         return {"status": "ok", "text": text}
     except Exception as error:
         return {"status": "error", "message": str(error)}
