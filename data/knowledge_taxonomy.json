@@ -1,0 +1,45 @@
+{
+  "technical_keywords": [
+    "how", "what", "why", "where", "when", "which", "who", "explain", "describe",
+    "linux", "python", "code", "script", "command", "terminal", "install", "config",
+    "error", "bug", "run", "sudo", "apt", "pip", "git", "docker", "ls", "grep",
+    "cat", "chmod", "chown", "systemctl", "journalctl", "service", "rsync", "ssh",
+    "stoicism", "stoic", "philosophy", "cooking", "recipe", "recipes", "anime",
+    "sci-fi", "scifi", "science fiction", "cybersecurity", "cyber security", "networking",
+    "network", "firewall", "encryption", "vulnerability", "vulnerabilities",
+    "authentication", "privacy", "security", "hentai", "ecchi", "ero anime", "adult anime"
+  ],
+  "categories": {
+    "anime": [
+      "anime", "hentai", "ecchi", "ero anime", "adult anime", "chainsaw man", "chainsawman",
+      "gurren lagann", "gurren lagan", "death note", "no game no life", "evangelion",
+      "neon genesis", "naruto", "bleach", "one piece", "jojo", "jojo's bizarre adventure",
+      "hunter x hunter", "hunterxhunter", "cyberpunk edgerunners", "bakemonogatari",
+      "one punch man", "saitama", "reze", "lelouch", "lain", "saiki", "mob psycho",
+      "steins gate", "code geass", "demon slayer", "attack on titan"
+    ],
+    "games": [
+      "game", "elden ring", "mobile legends", "sekiro", "dead cells", "tekken", "minecraft",
+      "wuthering waves", "black myth wukong", "blasphemous", "bitburner", "cyberpunk 2077"
+    ],
+    "lifestyle": [
+      "gym", "workout", "exercise", "push up", "push-up", "pull up", "pull-up", "squat",
+      "bench press", "muscle", "bulking", "lean bulking", "diet", "macro", "protein",
+      "nutrient", "meal", "sleep", "recovery"
+    ],
+    "linux": [
+      "arch", "arch linux", "archinstall", "pacman", "aur", "nvidia driver", "nvidia drivers",
+      "linux installation", "linux install", "laptop linux", "kernel", "bootloader",
+      "grub", "wayland", "xorg", "systemd", "ssh", "debian", "ubuntu", "fedora",
+      "alpine", "almalinux", "amazon linux", "centos", "gentoo", "kali linux", "linux mint",
+      "manjaro", "nixos", "opensuse", "oracle linux", "pop os", "red hat", "rhel", "rocky linux",
+      "slackware", "void linux", "cachyos", "cachy os", "apt-get", "dpkg", "dnf", "yum", "rpm", "apk", "portage",
+      "emerge", "zypper", "nixpkgs", "flatpak", "flathub", "snapcraft", "appimage", "btrfs",
+      "zfs", "lvm", "networkmanager", "wireguard", "nftables", "iptables", "openrc", "runit",
+      "qemu", "kvm", "libvirt", "gnome", "kde plasma", "xfce", "sway"
+    ],
+    "cooking": ["cook", "recipe", "fried egg", "bake", "ingredient"],
+    "philosophy": ["stoic", "philosophy", "marcus aurelius", "meditations"],
+    "raspberry_pi": ["raspberry pi", "gpio", "pi os", "rpi"]
+  }
+}

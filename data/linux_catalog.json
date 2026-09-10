@@ -1,0 +1,47 @@
+{
+  "distributions": [
+    {"name": "Alpine Linux", "product": "alpine"},
+    {"name": "AlmaLinux", "product": "almalinux"},
+    {"name": "Amazon Linux", "product": "amazon-linux"},
+    {"name": "Arch Linux", "product": "arch"},
+    {"name": "CentOS", "product": "centos"},
+    {"name": "CachyOS", "product": null},
+    {"name": "Debian", "product": "debian"},
+    {"name": "Fedora", "product": "fedora"},
+    {"name": "Gentoo Linux", "product": "gentoo"},
+    {"name": "Kali Linux", "product": "kali-linux"},
+    {"name": "Linux Mint", "product": "linuxmint"},
+    {"name": "Manjaro", "product": "manjaro"},
+    {"name": "NixOS", "product": "nixos"},
+    {"name": "openSUSE", "product": "opensuse"},
+    {"name": "Oracle Linux", "product": "oracle-linux"},
+    {"name": "Pop!_OS", "product": "pop-os"},
+    {"name": "Red Hat Enterprise Linux", "product": "rhel"},
+    {"name": "Rocky Linux", "product": "rocky-linux"},
+    {"name": "Slackware", "product": "slackware"},
+    {"name": "Ubuntu", "product": "ubuntu"},
+    {"name": "Void Linux", "product": "void-linux"}
+  ],
+  "package_ecosystems": [
+    {"name": "APT and dpkg", "aliases": ["apt", "apt-get", "dpkg", "debian packages", "ubuntu packages"]},
+    {"name": "Pacman and AUR", "aliases": ["pacman", "yay", "paru", "aur", "arch packages"]},
+    {"name": "DNF and RPM", "aliases": ["dnf", "yum", "rpm", "fedora packages", "red hat packages"]},
+    {"name": "APK", "aliases": ["apk", "alpine packages"]},
+    {"name": "Portage and Emerge", "aliases": ["portage", "emerge", "gentoo packages"]},
+    {"name": "Zypper and RPM", "aliases": ["zypper", "opensuse packages"]},
+    {"name": "Nix and Nixpkgs", "aliases": ["nix", "nixpkgs", "nixos packages"]},
+    {"name": "Flatpak", "aliases": ["flatpak", "flathub"]},
+    {"name": "Snap", "aliases": ["snap", "snapcraft"]},
+    {"name": "AppImage", "aliases": ["appimage"]}
+  ],
+  "topics": [
+    "installation", "live usb", "dual boot", "uefi", "bios", "secure boot", "partitioning",
+    "filesystem", "ext4", "btrfs", "xfs", "zfs", "lvm", "swap", "bootloader", "grub",
+    "kernel", "initramfs", "systemd", "openrc", "runit", "networkmanager", "wireguard",
+    "firewall", "nftables", "iptables", "ssh", "users and groups", "permissions", "sudo",
+    "logs", "journald", "cron", "containers", "docker", "podman", "kubernetes", "flatpak",
+    "nvidia", "mesa", "wayland", "xorg", "desktop environment", "gnome", "kde plasma",
+    "xfce", "i3", "sway", "audio", "bluetooth", "printing", "backup", "virtualization",
+    "qemu", "kvm", "libvirt", "troubleshooting", "security updates", "release lifecycle"
+  ]
+}

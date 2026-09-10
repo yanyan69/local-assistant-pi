@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "gutenberg-meditations",
+      "kind": "url",
+      "url": "https://www.gutenberg.org/files/2680/2680-0.txt",
+      "destination": "philosophy/texts/meditations.txt",
+      "category": "philosophy",
+      "refresh": "never",
+      "allowed_domains": ["www.gutenberg.org"],
+      "attribution": "Project Gutenberg eBook 2680 - Meditations by Marcus Aurelius.",
+      "license": "Project Gutenberg terms apply. Verify local reuse requirements."
+    },
+    {
+      "id": "gutenberg-frankenstein",
+      "kind": "url",
+      "url": "https://www.gutenberg.org/files/84/84-0.txt",
+      "destination": "anime/science_fiction/literature/frankenstein.txt",
+      "category": "anime/science_fiction/literature",
+      "refresh": "never",
+      "allowed_domains": ["www.gutenberg.org"],
+      "attribution": "Project Gutenberg eBook 84 - Frankenstein by Mary Shelley.",
+      "license": "Project Gutenberg terms apply. Verify local reuse requirements."
+    },
+    {
+      "id": "wikipedia-cooking",
+      "kind": "wikipedia_summary",
+      "page": "Cooking",
+      "destination": "cooking/foundations/cooking_reference.md",
+      "category": "cooking/foundations",
+      "refresh": "monthly",
+      "allowed_domains": ["en.wikipedia.org"],
+      "attribution": "Wikimedia Foundation",
+      "license": "Wikipedia content is available under its applicable Wikimedia license."
+    },
+    {
+      "id": "wikipedia-stoicism",
+      "kind": "wikipedia_summary",
+      "page": "Stoicism",
+      "destination": "philosophy/stoicism/stoicism_reference.md",
+      "category": "philosophy/stoicism",
+      "refresh": "monthly",
+      "allowed_domains": ["en.wikipedia.org"],
+      "attribution": "Wikimedia Foundation",
+      "license": "Wikipedia content is available under its applicable Wikimedia license."
+    },
+    {
+      "id": "wikipedia-anime",
+      "kind": "wikipedia_summary",
+      "page": "Anime",
+      "destination": "anime/foundations/anime_reference.md",
+      "category": "anime/foundations",
+      "refresh": "monthly",
+      "allowed_domains": ["en.wikipedia.org"],
+      "attribution": "Wikimedia Foundation",
+      "license": "Wikipedia content is available under its applicable Wikimedia license."
+    },
+    {
+      "id": "wikipedia-science-fiction",
+      "kind": "wikipedia_summary",
+      "page": "Science_fiction",
+      "destination": "anime/genres/science_fiction_reference.md",
+      "category": "anime/genres",
+      "refresh": "monthly",
+      "allowed_domains": ["en.wikipedia.org"],
+      "attribution": "Wikimedia Foundation",
+      "license": "Wikipedia content is available under its applicable Wikimedia license."
+    }
+  ]
+}

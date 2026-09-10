@@ -39,6 +39,7 @@ from core.app_config import (
     config_value,
     load_settings,
 )
+from utilities.offline_catalogs import query_catalog
 from core.local_memory import LocalMemoryStore
 from core.conversations import ConversationStore
 from robot import ROBOT_NAME, PERSONA_AVATAR
@@ -73,8 +74,27 @@ llm: Llama = None
 llm_lock = asyncio.Lock()
 memory_store = LocalMemoryStore(RUNTIME_CONFIG["memory_db_path"])
 conversation_store = ConversationStore()
-voice_transcriber = WhisperCppTranscriber()
-tts_synthesizer = PiperSynthesizer()
+voice_transcriber = None
+tts_synthesizer = None
+voice_backend_lock = threading.Lock()
+
+
+def get_voice_transcriber():
+    global voice_transcriber
+    if voice_transcriber is None and VOICE_ENABLED:
+        with voice_backend_lock:
+            if voice_transcriber is None:
+                voice_transcriber = WhisperCppTranscriber()
+    return voice_transcriber
+
+
+def get_tts_synthesizer():
+    global tts_synthesizer
+    if tts_synthesizer is None and TTS_ENABLED:
+        with voice_backend_lock:
+            if tts_synthesizer is None:
+                tts_synthesizer = PiperSynthesizer()
+    return tts_synthesizer
 voice_operation_lock = threading.Lock()
 
 
@@ -190,28 +210,40 @@ def init_fts5_index():
         print(f"[CRITICAL INDEX ERROR]: {e}")
 
 
+COMMAND_TERMS = {
+    "adb", "apt", "awk", "cat", "chmod", "chown", "cp", "curl", "docker", "ffmpeg",
+    "find", "gcc", "g++", "git", "grep", "htop", "journalctl", "make", "mv", "pip",
+    "python", "rsync", "scp", "sed", "ssh", "systemctl", "tar", "vim", "wget"
+}
+
+
 def search_database(query: str, max_results: int = 4, category: str = None) -> str:
     """Executes zero-RAM native C-level BM25 search via SQLite FTS5."""
+    catalog_result = query_catalog(query, top_k=max_results, category=category)
     if not os.path.exists(DB_PATH):
-        return "No local document records available."
+        return catalog_result or "No local document records available."
 
     sanitized_terms = re.findall(r'\w+', query.lower())
     stop_words = {"about", "what", "whatis", "explain", "describe", "intro", "tell", "your", "with", "this", "that", "from", "and", "how", "why", "does", "is"}
-    core_terms = [term for term in sanitized_terms if len(term) > 2 and term not in stop_words]
+    core_terms = [term for term in sanitized_terms if (len(term) > 2 or term in COMMAND_TERMS) and term not in stop_words]
 
     if not core_terms:
-        core_terms = [term for term in sanitized_terms if len(term) > 2]
+        core_terms = [term for term in sanitized_terms if len(term) > 2 or term in COMMAND_TERMS]
 
     if not core_terms:
         return "No clear search query detected."
 
-    fts_match_query = " OR ".join(core_terms)
+    search_queries = [
+        f'"{query.strip()}"',
+        " AND ".join(core_terms),
+        " OR ".join(core_terms),
+    ]
 
     try:
         with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True) as conn:
             cursor = conn.cursor()
 
-            category_filter = " AND category = ?" if category else ""
+            category_filter = " AND (category = ? OR category LIKE ? || '/%')" if category else ""
             sql = f"""
                 SELECT 
                     filename,
@@ -225,13 +257,16 @@ def search_database(query: str, max_results: int = 4, category: str = None) -> s
                 ORDER BY rank ASC
                 LIMIT ?
             """
-            params = (fts_match_query, category, max_results) if category else (fts_match_query, max_results)
-            cursor.execute(sql, params)
-
-            rows = cursor.fetchall()
+            params = (fts_match_query, category, category, max_results) if category else (fts_match_query, max_results)
+            rows = []
+            for fts_match_query in search_queries:
+                cursor.execute(sql, (fts_match_query, category, category, max_results) if category else (fts_match_query, max_results))
+                rows = cursor.fetchall()
+                if rows:
+                    break
 
             if not rows:
-                return "No highly relevant text matches found in local documents."
+                return catalog_result or "No highly relevant text matches found in local documents."
 
             top_matches = []
             for row in rows:
@@ -248,7 +283,10 @@ def search_database(query: str, max_results: int = 4, category: str = None) -> s
                     f"{content}"
                 )
 
-            return "\n\n---\n\n".join(top_matches) if top_matches else "No strong matches found."
+            document_result = "\n\n---\n\n".join(top_matches)
+            if document_result and catalog_result:
+                return f"{document_result}\n\n---\n\n{catalog_result}"
+            return document_result or catalog_result or "No strong matches found."
 
     except Exception as e:
         print(f"[SEARCH ERROR]: {e}")
@@ -291,7 +329,6 @@ async def lifespan(app: FastAPI):
         sys.stderr = open('CONOUT$', 'w', buffering=1)
 
     print("[SYSTEM INFO]: Llama 3.2 engine active and ready.")
-    init_fts5_index()
     backup_result = create_state_backup()
     print(f"[SYSTEM INFO]: State backup ready ({len(backup_result['created'])} file(s)).")
     memory_store.clear() if not os.path.exists(RUNTIME_CONFIG["memory_db_path"]) else None
@@ -327,7 +364,7 @@ async def status_endpoint():
         "safe_execution": RUNTIME_CONFIG["safe_execution"],
         "jellyfin_enabled": bool(JELLYFIN_URL and JELLYFIN_TOKEN),
         "voice_enabled": VOICE_ENABLED,
-        "voice_configured": voice_transcriber.configured,
+        "voice_configured": bool(get_voice_transcriber() and get_voice_transcriber().configured),
         "media_directory": str(MEDIA_DIR),
         "threads": RUNTIME_CONFIG["n_threads"],
         "context": RUNTIME_CONFIG["n_ctx"],
@@ -388,11 +425,11 @@ async def tools_endpoint():
 async def voice_status_endpoint():
     return {
         "enabled": VOICE_ENABLED,
-        "configured": voice_transcriber.configured,
+        "configured": bool(get_voice_transcriber() and get_voice_transcriber().configured),
         "backend": "whisper.cpp",
         "language": voice_transcriber.language,
         "tts_enabled": TTS_ENABLED,
-        "tts_configured": tts_synthesizer.configured,
+        "tts_configured": bool(get_tts_synthesizer() and get_tts_synthesizer().configured),
         "jellyfin_enabled": JELLYFIN_ENABLED,
     }
 
@@ -406,7 +443,10 @@ async def tts_endpoint(request: Request):
     if not voice_operation_lock.acquire(blocking=False):
         return {"status": "busy", "message": "Voice processing is busy. Try again shortly."}
     try:
-        audio = await asyncio.get_running_loop().run_in_executor(None, tts_synthesizer.synthesize, text)
+        synthesizer = get_tts_synthesizer()
+        if synthesizer is None:
+            return {"status": "disabled", "message": "Text to speech is disabled in local-ai.config."}
+        audio = await asyncio.get_running_loop().run_in_executor(None, synthesizer.synthesize, text)
         return StreamingResponse(iter([audio]), media_type="audio/wav", headers={"Cache-Control": "no-store"})
     except Exception as error:
         return {"status": "error", "message": str(error)}
@@ -421,11 +461,14 @@ async def voice_transcribe_endpoint(request: Request):
     if not voice_operation_lock.acquire(blocking=False):
         return {"status": "busy", "message": "Voice processing is busy. Try again shortly."}
     try:
+        transcriber = get_voice_transcriber()
+        if transcriber is None:
+            return {"status": "disabled", "message": "Voice input is disabled in local-ai.config."}
         audio = await request.body()
         content_type = request.headers.get("content-type", "audio/webm")
         suffix = ".wav" if "wav" in content_type else ".webm"
         text = await asyncio.get_running_loop().run_in_executor(
-            None, voice_transcriber.transcribe_bytes, audio, suffix
+            None, transcriber.transcribe_bytes, audio, suffix
         )
         if not text.strip():
             return {"status": "empty", "text": "", "message": "No clear speech detected."}

@@ -8,12 +8,22 @@ import urllib.parse
 import json
 import re
 import sqlite3
+import argparse
+import hashlib
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlparse
 from core.app_config import BUILD_DIR as CONFIG_BUILD_DIR, KNOWLEDGE_BASE_DIR, KNOWLEDGE_DB_PATH
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 KB_DIR = str(KNOWLEDGE_BASE_DIR)
 BUILD_DIR = str(CONFIG_BUILD_DIR)
 DB_PATH = str(KNOWLEDGE_DB_PATH)
+KB_PATH = Path(KB_DIR).resolve()
+SOURCES_DIR = KB_PATH / "sources"
+SOURCE_MANIFEST_PATH = SOURCES_DIR / "manifest.json"
+SOURCE_METADATA_DIR = SOURCES_DIR / "metadata"
+MAX_SOURCE_BYTES = 25 * 1024 * 1024
 
 
 def prepare_directories():
@@ -36,14 +46,28 @@ def init_db():
                 content TEXT
             );
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS index_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+        """)
         conn.commit()
 
 
 def download_file(url: str, dest_path: str):
     """Helper to download files using custom headers to avoid GitHub blocking."""
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(req) as response, open(dest_path, 'wb') as out_file:
-        shutil.copyfileobj(response, out_file)
+    with urllib.request.urlopen(req, timeout=30) as response, open(dest_path, 'wb') as out_file:
+        total = 0
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_SOURCE_BYTES:
+                raise ValueError(f"download exceeds {MAX_SOURCE_BYTES} byte limit")
+            out_file.write(chunk)
 
 
 def fetch_tldr_pages():
@@ -59,7 +83,7 @@ def fetch_tldr_pages():
             zip_ref.extractall(extract_path)
 
         tldr_pages_dir = os.path.join(extract_path, "tldr-main", "pages")
-        out_tldr = os.path.join(KB_DIR, "tldr_commands")
+        out_tldr = os.path.join(KB_DIR, "linux", "commands", "tldr")
         os.makedirs(out_tldr, exist_ok=True)
 
         count = 0
@@ -80,10 +104,10 @@ def fetch_tldr_pages():
         print(f"[x] Failed to fetch tldr-pages: {e}")
 
 
-def dump_system_cli_help():
+def dump_linux_cli_help():
     """Extract help outputs directly from installed software on Pi."""
     print("[*] Generating offline manuals for installed system tools...")
-    out_sys = os.path.join(KB_DIR, "system_cli")
+    out_sys = os.path.join(KB_DIR, "linux", "commands", "manuals")
     os.makedirs(out_sys, exist_ok=True)
 
     tools = [
@@ -114,7 +138,7 @@ def dump_system_cli_help():
 def fetch_awesome_cheatsheets():
     """Download programming cheatsheets from live mirror."""
     print("[*] Fetching programming & Linux cheatsheets...")
-    out_cheat = os.path.join(KB_DIR, "cheatsheets")
+    out_cheat = os.path.join(KB_DIR, "programming", "cheatsheets")
     os.makedirs(out_cheat, exist_ok=True)
 
     # Active LeCoupa mirror URL
@@ -143,69 +167,118 @@ def fetch_awesome_cheatsheets():
         print(f"[x] Failed to fetch cheatsheets: {e}")
 
 
-def fetch_open_knowledge_sources():
-    """Download small, attributed public-domain and Wikimedia reference sources."""
-    print("[*] Fetching open general-knowledge sources...")
+def load_source_manifest():
+    if not SOURCE_MANIFEST_PATH.exists():
+        print(f"[!] Source manifest not found: {SOURCE_MANIFEST_PATH}")
+        return []
+    with SOURCE_MANIFEST_PATH.open("r", encoding="utf-8") as manifest_file:
+        manifest = json.load(manifest_file)
+    sources = manifest.get("sources", [])
+    if not isinstance(sources, list):
+        raise ValueError("manifest field 'sources' must be a list")
+    return sources
 
-    gutenberg_sources = {
-        "philosophy/meditations.txt": (
-            "https://www.gutenberg.org/files/2680/2680-0.txt",
-            "Project Gutenberg eBook 2680 - Meditations by Marcus Aurelius."
-        ),
-        "anime_scifi/frankenstein.txt": (
-            "https://www.gutenberg.org/files/84/84-0.txt",
-            "Project Gutenberg eBook 84 - Frankenstein by Mary Shelley."
-        ),
+
+def source_metadata_path(source_id):
+    safe_id = re.sub(r"[^a-zA-Z0-9_.-]", "_", source_id)
+    return SOURCE_METADATA_DIR / f"{safe_id}.json"
+
+
+def source_destination(source):
+    destination = (KB_PATH / source.get("destination", "")).resolve()
+    if destination == KB_PATH or KB_PATH not in destination.parents:
+        raise ValueError("destination must stay inside knowledge_base")
+    return destination
+
+
+def source_is_allowed(source):
+    hostname = urlparse(source.get("url", "")).hostname
+    allowed_domains = source.get("allowed_domains", [])
+    return bool(hostname and hostname in allowed_domains)
+
+
+def source_is_due(source, destination):
+    if not destination.exists() or source.get("refresh", "never") == "never":
+        return not destination.exists()
+    metadata_path = source_metadata_path(source["id"])
+    if not metadata_path.exists():
+        return True
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        retrieved_at = datetime.fromisoformat(metadata["retrieved_at"])
+        age_days = (datetime.now(timezone.utc) - retrieved_at).days
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        return True
+    refresh_days = {"daily": 1, "weekly": 7, "monthly": 30}.get(source["refresh"])
+    return refresh_days is not None and age_days >= refresh_days
+
+
+def write_source_metadata(source, destination, actual_url):
+    metadata = {
+        "source_id": source["id"],
+        "url": actual_url,
+        "destination": source["destination"],
+        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+        "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
+        "attribution": source.get("attribution", ""),
+        "license": source.get("license", ""),
     }
+    SOURCE_METADATA_DIR.mkdir(parents=True, exist_ok=True)
+    source_metadata_path(source["id"]).write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
-    for relative_path, (url, attribution) in gutenberg_sources.items():
-        destination = os.path.join(KB_DIR, relative_path)
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        if os.path.exists(destination):
-            continue
+
+def fetch_manifest_sources(force=False):
+    """Download only approved manifest sources and record provenance metadata."""
+    print("[*] Fetching approved manifest sources...")
+    downloaded = 0
+    skipped = 0
+    seen_ids = set()
+    for source in load_source_manifest():
+        source_id = source.get("id")
         try:
-            download_file(url, destination)
-            with open(destination, "r+", encoding="utf-8", errors="ignore") as handle:
-                content = handle.read()
-                handle.seek(0)
-                handle.write(f"Source: {attribution}\nURL: {url}\n\n{content}")
-                handle.truncate()
-            print(f"[+] Downloaded {relative_path}.")
+            if not source_id or source_id in seen_ids:
+                raise ValueError("source id is missing or duplicated")
+            seen_ids.add(source_id)
+            destination = source_destination(source)
+            kind = source.get("kind")
+            if kind == "url" and not source_is_allowed(source):
+                raise ValueError("URL domain is not in allowed_domains")
+            if kind not in {"url", "wikipedia_summary"}:
+                raise ValueError(f"unsupported source kind: {kind}")
+            if not force and not source_is_due(source, destination):
+                skipped += 1
+                continue
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            actual_url = source.get("url")
+            if kind == "wikipedia_summary":
+                page = urllib.parse.quote(source["page"], safe="")
+                actual_url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{page}"
+                request = urllib.request.Request(actual_url, headers={"User-Agent": "local-assistant-pi/1.0"})
+                with urllib.request.urlopen(request, timeout=15) as response:
+                    data = json.load(response)
+                extract = data.get("extract", "").strip()
+                actual_url = data.get("content_urls", {}).get("desktop", {}).get("page", actual_url)
+                if not extract:
+                    raise ValueError("source returned no extract")
+                content = (
+                    f"# {data.get('title', source['page'].replace('_', ' '))}\n\n{extract}\n\n"
+                    f"## Source and license\n\nSource: Wikipedia, {actual_url}\n"
+                    f"{source.get('license', '')}\n"
+                )
+                destination.write_text(content, encoding="utf-8")
+            else:
+                download_file(actual_url, str(destination))
+                content = destination.read_text(encoding="utf-8", errors="ignore")
+                destination.write_text(
+                    f"Source: {source.get('attribution', '')}\nURL: {actual_url}\n\n{content}",
+                    encoding="utf-8",
+                )
+            write_source_metadata(source, destination, actual_url)
+            downloaded += 1
+            print(f"[+] Updated manifest source: {source_id}")
         except Exception as error:
-            print(f"[x] Failed to download {relative_path}: {error}")
-
-    wikipedia_pages = {
-        "cooking/cooking_reference.md": "Cooking",
-        "philosophy/stoicism_reference.md": "Stoicism",
-        "anime_scifi/anime_reference.md": "Anime",
-        "anime_scifi/science_fiction_reference.md": "Science_fiction",
-    }
-
-    for relative_path, page in wikipedia_pages.items():
-        destination = os.path.join(KB_DIR, relative_path)
-        os.makedirs(os.path.dirname(destination), exist_ok=True)
-        if os.path.exists(destination):
-            continue
-        encoded_page = urllib.parse.quote(page, safe="")
-        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded_page}"
-        try:
-            request = urllib.request.Request(url, headers={"User-Agent": "local-assistant-pi/1.0"})
-            with urllib.request.urlopen(request, timeout=15) as response:
-                data = json.load(response)
-            extract = data.get("extract", "").strip()
-            source_url = data.get("content_urls", {}).get("desktop", {}).get("page", url)
-            if extract:
-                with open(destination, "w", encoding="utf-8") as handle:
-                    handle.write(
-                        f"# {data.get('title', page.replace('_', ' '))}\n\n"
-                        f"{extract}\n\n"
-                        "## Source and license\n\n"
-                        f"Source: Wikipedia, {source_url}\n"
-                        "Content is available under the applicable Wikimedia Commons/Wikipedia license.\n"
-                    )
-                print(f"[+] Downloaded {relative_path}.")
-        except Exception as error:
-            print(f"[x] Failed to download {relative_path}: {error}")
+            print(f"[x] Failed manifest source {source_id or '<unknown>'}: {error}")
+    print(f"[+] Manifest sources updated: {downloaded}; skipped: {skipped}.")
 
 
 def split_document(content: str, max_chars: int = 2400):
@@ -247,6 +320,7 @@ def populate_sqlite_database():
     init_db()
 
     inserted_count = 0
+    content_digest = hashlib.sha256()
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
         
@@ -254,7 +328,8 @@ def populate_sqlite_database():
         cursor.execute("DELETE FROM paragraphs;")
 
         for root, _, files in os.walk(KB_DIR):
-            category = os.path.basename(root)
+            relative_root = os.path.relpath(root, KB_DIR).replace("\\", "/")
+            category = "" if relative_root == "." else relative_root
             for file in files:
                 if file.endswith((".md", ".txt")):
                     filepath = os.path.join(root, file)
@@ -267,6 +342,9 @@ def populate_sqlite_database():
                         if not content:
                             continue
 
+                        content_digest.update(rel_path.encode("utf-8"))
+                        content_digest.update(content.encode("utf-8", errors="ignore"))
+
                         for chunk_number, chunk in enumerate(split_document(content), start=1):
                             chunk_path = f"{rel_path}#section-{chunk_number}"
                             cursor.execute("""
@@ -277,6 +355,14 @@ def populate_sqlite_database():
                     except Exception as e:
                         print(f"[!] Error indexing {file}: {e}")
 
+        cursor.execute(
+            "INSERT OR REPLACE INTO index_metadata(key, value) VALUES (?, ?)",
+            ("content_hash", content_digest.hexdigest()),
+        )
+        cursor.execute(
+            "INSERT OR REPLACE INTO index_metadata(key, value) VALUES (?, ?)",
+            ("index_version", datetime.now(timezone.utc).isoformat()),
+        )
         conn.commit()
 
     print(f"[+] Successfully saved {inserted_count} files into `{DB_PATH}`.")
@@ -324,11 +410,14 @@ def cleanup():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Download approved sources and rebuild the local knowledge index.")
+    parser.add_argument("--force", action="store_true", help="Refresh manifest sources even when their policy says they are not due.")
+    args = parser.parse_args()
     prepare_directories()
     fetch_tldr_pages()
-    dump_system_cli_help()
+    dump_linux_cli_help()
     fetch_awesome_cheatsheets()
-    fetch_open_knowledge_sources()
+    fetch_manifest_sources(force=args.force)
     populate_sqlite_database()
     cleanup()
     print(f"\n[+] Ingestion complete! SQLite database updated at `{DB_PATH}`.")

@@ -9,7 +9,7 @@ from core.local_memory import LocalMemoryStore
 from core.tools import execute_tool
 from robot import process_robot_request
 from core.system_context import read_system_context
-from robot import build_llama3_prompt, clean_model_response
+from robot import build_llama3_prompt, clean_model_response, clean_search_query
 
 
 class LocalAssistantConfigurationTests(unittest.TestCase):
@@ -32,13 +32,42 @@ class LocalAssistantConfigurationTests(unittest.TestCase):
     def test_prompt_includes_approved_system_context(self):
         prompt = build_llama3_prompt(
             "You are local.",
-            "",
+            "[Source: notes.md]\n[Category: test]\nRetrieved fact.",
             [],
             "What time is it?",
             system_context={"local_time": "03:04", "power_saving_mode": True},
         )
         self.assertIn("Approved Local System Context", prompt)
         self.assertIn("03:04", prompt)
+        self.assertIn("Retrieved Local Context", prompt)
+        self.assertIn("Treat Retrieved Local Context as reference material", prompt)
+
+    def test_empty_retrieval_prompt_does_not_assume_platform(self):
+        prompt = build_llama3_prompt("You are local.", "", [], "How do I transfer files?")
+        self.assertIn("Retrieved Local Context: NONE", prompt)
+        self.assertIn("Do not assume the user's operating system", prompt)
+
+    def test_short_command_names_are_preserved_in_search_query(self):
+        query = clean_search_query("more commands using cp in linux")
+        self.assertIn("cp", query.split())
+        self.assertIn("linux", query.split())
+
+    def test_debug_retrieval_trace_exposes_search_context_and_sources(self):
+        def retrieval_llm(*args, **kwargs):
+            return {"choices": [{"text": "Here is the grounded answer."}]}
+
+        def search_database(query, category=None):
+            return "[Source: local_notes.md]\n[Category: philosophy]\nA grounded local fact."
+
+        response, status = process_robot_request(
+            {"query": "explain stoicism", "history": [], "debug_retrieval": True},
+            retrieval_llm,
+            search_database=search_database,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(response["retrieval_trace"]["query"], "stoicism command usage explanation")
+        self.assertEqual(response["retrieval_trace"]["sources"], [{"filename": "local_notes.md", "category": "philosophy"}])
+        self.assertIn("A grounded local fact.", response["retrieval_trace"]["context"])
 
     def test_time_question_uses_approved_local_clock(self):
         def unexpected_llm(*args, **kwargs):
@@ -202,7 +231,7 @@ class LocalAssistantConfigurationTests(unittest.TestCase):
         try:
             store.add_memory("user", "hello there")
             store.add_memory("assistant", "hello back")
-            store.add_fact("User likes science fiction", "anime_scifi")
+            store.add_fact("User likes science fiction", "anime")
             self.assertGreater(len(store.get_recent_history(limit=10)), 0)
             self.assertIn("hello there", store.get_recent_history(limit=10)[0]["content"])
             self.assertIn("science fiction", store.get_memory_summary())

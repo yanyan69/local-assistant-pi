@@ -5,14 +5,26 @@ server-files-draft/
 *.gguf
 myenv/
 .claudeignore
-knowledge_base/
+knowledge_base/*
+!knowledge_base/sources/
+!knowledge_base/sources/manifest.json
+!knowledge_base/sources/metadata/
+!knowledge_base/sources/metadata/*.json
 data/*.gguf
 data/*.json
+!data/curated_responses.json
+!data/knowledge_taxonomy.json
+!data/routing_config.json
+!data/linux_catalog.json
 data/backups/
 .continue/
 .vscode/
 
 data/local_memory.db
+data/offline_catalog.db
+data/offline_catalog.db-wal
+data/offline_catalog.db-shm
+data/catalogs/
 data/conversations/
 local-ai.config
 assets/music/
