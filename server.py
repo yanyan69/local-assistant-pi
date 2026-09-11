@@ -14,9 +14,10 @@ import queue
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager, contextmanager
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 # Suppress Llama native logs via environment variables before import
@@ -340,8 +341,33 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:8765", "http://localhost:8765", "http://127.0.0.1:5000", "http://localhost:5000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
 os.makedirs(ASSETS_DIR, exist_ok=True)
+
+@app.get("/local-ai.config")
+async def config_file():
+    return FileResponse(os.path.join(PROJECT_ROOT, "local-ai.config"))
+
+@app.post("/api/assets/upload")
+async def upload_asset(file: UploadFile = File(...)):
+    filename = file.filename or "uploaded_asset.bin"
+    safe_name = os.path.basename(filename)
+    candidate = os.path.normpath(os.path.join(ASSETS_DIR, safe_name))
+    if os.path.commonpath([os.path.abspath(ASSETS_DIR), os.path.abspath(candidate)]) != os.path.abspath(ASSETS_DIR):
+        raise HTTPException(status_code=400, detail="Invalid asset target.")
+    os.makedirs(ASSETS_DIR, exist_ok=True)
+    contents = await file.read()
+    with open(candidate, "wb") as asset_file:
+        asset_file.write(contents)
+    return JSONResponse({"status": "ok", "path": f"/assets/{safe_name}"})
+
 app.mount("/assets", StaticFiles(directory=ASSETS_DIR), name="assets")
 app.mount("/web_ui", StaticFiles(directory="web_ui"), name="web_ui")
 

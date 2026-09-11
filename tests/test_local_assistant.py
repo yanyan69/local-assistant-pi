@@ -238,6 +238,31 @@ class LocalAssistantConfigurationTests(unittest.TestCase):
             finally:
                 app_config.SETTINGS_PATH = original_path
 
+    def test_power_saving_mode_bounds_prompt_inputs(self):
+        captured = {}
+
+        def capture_prompt(prompt, **kwargs):
+            captured["prompt"] = prompt
+            return {"choices": [{"text": "Concise answer."}]}
+
+        response, status = process_robot_request(
+            {
+                "query": "explain linux",
+                "history": [("old question", "old answer"), ("recent question", "recent answer")],
+                "power_saving_mode": True,
+                "system_context": {"local_time": "03:04", "power_saving_mode": True},
+            },
+            capture_prompt,
+            search_database=lambda query: "R" * 2000,
+            memory_store=type("Memory", (), {"get_memory_summary": lambda self, limit=6: "M" * 2000})(),
+        )
+
+        self.assertEqual(status, 200)
+        self.assertIn("recent question", captured["prompt"])
+        self.assertNotIn("old question", captured["prompt"])
+        self.assertLess(captured["prompt"].count("R"), 1000)
+        self.assertLess(captured["prompt"].count("M"), 500)
+
     def test_typed_temperature_tool_returns_structured_result(self):
         result = execute_tool("get_temperature")
         self.assertIn(result["status"], {"ok", "error"})

@@ -4,26 +4,51 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Local Assistant</title>
-  <link rel="stylesheet" href="/web_ui/styles.css?v=history-menu-2">
+  <link rel="icon" type="image/svg+xml" href="/assets/browser-icon.svg">
+  <link rel="apple-touch-icon" href="/assets/browser-icon.svg">
+  <link rel="stylesheet" href="/web_ui/styles.css?v=sample-shell-5">
 </head>
 <body>
   <div class="app" id="app">
     <aside class="sidebar" id="sidebar">
       <div class="brand"><div class="avatar" id="brandAvatar">AI</div><div><strong id="brandName">Local Assistant</strong><small id="statusLabel">Starting</small></div><button class="icon-button sidebar-toggle" id="sidebarToggle" aria-label="Collapse sidebar">☰</button></div>
-      <button class="new-chat" id="newChatButton">＋ <span>New chat</span></button>
-      <details class="history-menu" id="historyMenu">
-        <summary class="history-toggle">Chat history <span class="history-chevron" aria-hidden="true"></span></summary>
-        <div class="conversation-list" id="conversationList"></div>
+      <nav class="sidebar-rail" aria-label="Quick actions">
+        <button class="rail-button" id="railNewChat" type="button" title="New chat" aria-label="New chat">✦</button>
+        <button class="rail-button" id="railTools" type="button" title="Tools" aria-label="Tools">⌘</button>
+        <div class="rail-tool-dropdown" id="railToolDropdown" hidden>
+          <button class="rail-tool-entry" type="button" data-panel="memoryPanel"><span class="tool-icon">▤</span><span>Memory</span></button>
+          <button class="rail-tool-entry" type="button" data-panel="hardwarePanel"><span class="tool-icon">⌘</span><span>Hardware</span></button>
+          <button class="rail-tool-entry" type="button" data-panel="musicPanel"><span class="tool-icon">♫</span><span>Music</span></button>
+        </div>
+      </nav>
+      <button class="new-chat" id="newChatButton"><span class="newchat-icon">✦</span><span>New chat</span></button>
+      <details class="sidebar-section" id="toolsSection">
+        <summary class="section-toggle"><span class="section-title">Tools</span><span class="history-chevron" aria-hidden="true"></span></summary>
+        <div class="tool-list">
+          <button class="tool-entry" type="button" data-panel="memoryPanel"><span class="tool-icon">▤</span><span>Memory</span></button>
+          <button class="tool-entry" type="button" data-panel="hardwarePanel"><span class="tool-icon">⌘</span><span>Hardware controller</span></button>
+          <button class="tool-entry" type="button" data-panel="musicPanel"><span class="tool-icon">♫</span><span>Music</span></button>
+        </div>
       </details>
       <div class="sidebar-spacer"></div>
-      <div class="system-info"><span id="runtimeMode">Loading...</span><span id="runtimeHardware">Local host</span><span id="runtimeLatency">No requests</span></div>
+      <button class="settings-button" id="settingsButton" type="button"><span class="settings-icon">⚙</span><span>Settings</span></button>
     </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
     <main class="main-content">
-      <header class="chat-header"><button class="mobile-menu" id="mobileMenu" aria-label="Open sidebar">☰</button><div class="avatar" id="panelAvatar">AI</div><div><strong id="headerPersonaName">Local Assistant</strong><small id="headerPersonaStatus">Ready</small></div></header>
-      <section class="chat-box" id="chatBox"><div class="chat-container" id="chatContainer"><div class="message bot"><div class="message-avatar">AI</div><div class="message-body">System initialized and running locally. Ask for code, Linux help, or hardware control.</div></div></div></section>
-      <form class="input-container" id="messageForm"><textarea id="userInput" rows="1" placeholder="Message the assistant..."></textarea><button class="voice-button" id="voiceButton" type="button" aria-label="Speak">🎙</button><button class="send-button" id="sendButton" type="submit" aria-label="Send">➜</button></form>
+      <header class="chat-header"><button class="mobile-menu" id="mobileMenu" aria-label="Open sidebar">☰</button><div class="avatar" id="panelAvatar">AI</div><div class="chat-title"><strong id="headerPersonaName">Local Assistant</strong><small id="headerPersonaStatus">Ready</small></div><div class="runtime-strip"><span id="runtimeMode">Mode: balanced</span><span id="runtimeHardware">Local host</span><span id="runtimeLatency">No requests</span></div></header>
+      <section class="chat-box" id="chatBox"><div class="chat-container" id="chatContainer"><div class="welcome-screen" id="welcomeScreen"><div class="welcome-orb avatar" id="welcomeAvatar">AI</div><h1>What can I help you with?</h1><p>Ask locally for code, Linux help, or hardware control.</p><div class="suggestion-grid"><button type="button" data-prompt="Show me useful Linux commands for today.">Linux commands</button><button type="button" data-prompt="Help me write a small Python script.">Write Python</button><button type="button" data-prompt="What hardware status can you check?"><span>Hardware status</span></button></div></div></div></section>
+      <form class="input-container" id="messageForm">
+        <div class="composer-topline"><span class="attachment-chip" id="attachmentChip" hidden></span><select id="modeSelect" aria-label="Assistant mode"><option value="balanced">Balanced</option><option value="low_ram">Low RAM</option><option value="power_saving">Power saving</option></select></div>
+        <textarea id="userInput" rows="1" placeholder="Message the assistant..."></textarea>
+        <div class="composer-bottomline"><div class="composer-tools"><input id="attachmentInput" type="file" accept=".txt,.md,.json,.py,.sh,.log,.csv" hidden><button class="composer-icon" id="attachButton" type="button" aria-label="Attach text file" title="Attach text file">＋</button><button class="composer-icon" id="toolsButton" type="button" aria-expanded="false" aria-controls="toolsPanel" aria-label="More tools" title="More tools">⋯</button><div class="tools-panel" id="toolsPanel" hidden><label><input id="speakToggle" type="checkbox" checked> Speak responses</label><button id="clearChatButton" type="button">Clear current chat</button></div></div><div class="composer-actions"><button class="voice-button" id="voiceButton" type="button" aria-label="Speak">🎙</button><button class="send-button" id="sendButton" type="submit" aria-label="Send">➜</button></div></div>
+      </form>
     </main>
+    <div class="tool-panel-backdrop" id="toolPanelBackdrop" hidden></div>
+    <section class="tool-panel-window" id="memoryPanel" hidden aria-labelledby="memoryPanelTitle"><header><div><small>Tools / Memory</small><h2 id="memoryPanelTitle">Memory</h2></div><button class="panel-close" type="button" aria-label="Close panel">×</button></header><div class="panel-content"><div class="memory-tabs"><button class="active" type="button">Chat history</button><button type="button">AI memory</button></div><div class="memory-summary"><strong id="memoryConversationCount">Local conversations</strong><span>Stored on this device</span></div><div class="conversation-list-wrap"><div class="conversation-list" id="conversationList"></div></div><textarea id="memoryNote" rows="5" placeholder="Add a note for the assistant..."></textarea><button class="panel-action" id="saveMemoryButton" type="button">Save memory note</button><div id="memoryNoteStatus" class="panel-status"></div></div></section>
+    <section class="tool-panel-window" id="hardwarePanel" hidden aria-labelledby="hardwarePanelTitle"><header><div><small>Tools / ESP32</small><h2 id="hardwarePanelTitle">Hardware controller</h2></div><button class="panel-close" type="button" aria-label="Close panel">×</button></header><div class="panel-content"><div class="hardware-status"><span class="status-dot"></span><div><strong>ESP32 preset</strong><span>Ready for integration</span></div></div><div class="quick-action-grid"><button type="button" data-hardware-action="display">Display preset</button><button type="button" data-hardware-action="lights">Toggle lights</button><button type="button" data-hardware-action="status">Refresh status</button><button type="button" data-hardware-action="safe">Safe mode</button></div><div id="hardwareStatus" class="panel-status">No hardware command sent.</div></div></section>
+    <section class="tool-panel-window" id="musicPanel" hidden aria-labelledby="musicPanelTitle"><header><div><small>Tools / Jellyfin</small><h2 id="musicPanelTitle">Music</h2></div><button class="panel-close" type="button" aria-label="Close panel">×</button></header><div class="panel-content"><div class="music-now-playing"><div class="album-art">♫</div><div><strong id="musicTitle">Jellyfin library</strong><span id="musicSubtitle">Connect a player to begin</span></div></div><div class="music-controls"><button type="button" aria-label="Previous track">|◀</button><button type="button" aria-label="Play music">▶</button><button type="button" aria-label="Next track">▶|</button></div><div class="panel-status">Playback controls will connect to Jellyfin when enabled.</div></div></section>
+    <section class="tool-panel-window settings-panel" id="settingsPanel" hidden aria-labelledby="settingsPanelTitle"><header><div><small>Settings</small><h2 id="settingsPanelTitle">Settings</h2></div><button class="panel-close" type="button" aria-label="Close panel">×</button></header><div class="panel-content settings-content"><div class="settings-tabs"><button class="settings-tab active" type="button" data-settings-tab="account">Account</button><button class="settings-tab" type="button" data-settings-tab="configuration">Configuration</button></div><div class="settings-view"><section class="settings-section" id="settingsAccountSection"><div class="settings-account"><div class="avatar" id="settingsAvatar">AI</div><div class="settings-account-card"><div class="settings-label">Developer account</div><div class="settings-account-name">developer</div><div class="settings-account-meta">Local Assistant</div></div></div></section><section class="settings-section" id="settingsConfigSection" hidden><label class="settings-config-label">local-ai.config</label><textarea id="configEditor" rows="12"></textarea><div class="config-control-row"><input type="file" id="assetImportInput" hidden><button class="panel-action small-button" id="assetImportButton" type="button">Import asset</button><span class="panel-status" id="assetImportStatus">No asset selected</span></div><button class="panel-action" id="saveConfigButton" type="button">Save configuration</button><div id="configStatus" class="panel-status"></div></section></div></div></section>
   </div>
-  <script src="/web_ui/app.js?v=history-menu-3"></script>
+  <script src="/web_ui/app.js?v=sample-shell-5"></script>
 </body>
 </html>

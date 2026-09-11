@@ -5,6 +5,9 @@ let mediaRecorder = null;
 let voiceChunks = [];
 let personaAvatar = '';
 let conversationLoadSequence = 0;
+let generationController = null;
+let attachedText = '';
+let speakResponsesEnabled = true;
 
 const byId = (id) => document.getElementById(id);
 
@@ -54,7 +57,8 @@ function renderMarkdown(text) {
 
 function setMessageContent(element, text, streaming = false) {
   element.dataset.text = text || '';
-  element.innerHTML = renderMarkdown(text) + (streaming ? '<span class="cursor"></span>' : '');
+  element.classList.toggle('streaming', streaming);
+  element.innerHTML = renderMarkdown(text);
   element.querySelectorAll('.copy-code-button').forEach((button) => {
     button.onclick = async () => {
       const code = button.parentElement.querySelector('code')?.textContent || '';
@@ -73,13 +77,150 @@ function setMessageContent(element, text, streaming = false) {
   });
 }
 
+function appendStreamingCursor(element) {
+  if (!element.classList.contains('streaming')) return;
+  element.querySelector('.cursor')?.remove();
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  cursor.setAttribute('aria-hidden', 'true');
+  element.appendChild(cursor);
+}
+
+function openToolPanel(panelId) {
+  document.querySelectorAll('.tool-panel-window').forEach((panel) => { panel.hidden = panel.id !== panelId; });
+  const backdrop = byId('toolPanelBackdrop');
+  backdrop.hidden = false;
+  requestAnimationFrame(() => backdrop.classList.add('visible'));
+}
+
+function closeToolPanels() {
+  document.querySelectorAll('.tool-panel-window').forEach((panel) => { panel.hidden = true; });
+  const backdrop = byId('toolPanelBackdrop');
+  backdrop.classList.remove('visible');
+  setTimeout(() => { backdrop.hidden = true; }, 180);
+}
+
+async function copyText(text, button) {
+  try {
+    await navigator.clipboard.writeText(text);
+    button.textContent = '✓';
+    setTimeout(() => { button.textContent = '⧉'; }, 1200);
+  } catch (error) {
+    button.title = 'Copy failed';
+  }
+}
+
+function removeWelcome() {
+  byId('welcomeScreen')?.remove();
+}
+
+function renderWelcome() {
+  let welcome = byId('welcomeScreen');
+  if (!welcome) {
+    welcome = document.createElement('div');
+    welcome.id = 'welcomeScreen';
+    welcome.className = 'welcome-screen';
+    welcome.innerHTML = '<div class="welcome-orb avatar" id="welcomeAvatar">AI</div><h1>What can I help you with?</h1><p>Ask locally for code, Linux help, or hardware control.</p><div class="suggestion-grid"><button type="button" data-prompt="Show me useful Linux commands for today.">Linux commands</button><button type="button" data-prompt="Help me write a small Python script.">Write Python</button><button type="button" data-prompt="What hardware status can you check?">Hardware status</button></div>';
+  }
+  byId('chatContainer').replaceChildren(welcome);
+  welcome.hidden = false;
+  const name = byId('headerPersonaName').textContent || 'AI';
+  setAvatarImage(byId('welcomeAvatar'), name);
+  bindWelcomePrompts();
+}
+
+function bindWelcomePrompts() {
+  const welcome = byId('welcomeScreen');
+  if (!welcome) return;
+  welcome.querySelectorAll('[data-prompt]').forEach((button) => {
+    button.onclick = () => {
+      byId('userInput').value = button.dataset.prompt || '';
+      autoResize();
+      byId('userInput').focus();
+    };
+  });
+}
+
+function findMessageText(wrapper) {
+  return wrapper?.querySelector('.message-body')?.dataset.text || wrapper?.querySelector('.message-body')?.textContent || '';
+}
+
+function addMessageActions(wrapper, role) {
+  const actions = document.createElement('div');
+  actions.className = 'message-actions';
+  const copy = document.createElement('button');
+  copy.type = 'button'; copy.textContent = '⧉'; copy.title = 'Copy'; copy.setAttribute('aria-label', 'Copy message');
+  copy.onclick = () => copyText(findMessageText(wrapper), copy);
+  actions.appendChild(copy);
+  if (role === 'bot') {
+    const speak = document.createElement('button');
+    speak.type = 'button'; speak.textContent = '◖'; speak.title = 'Speak aloud'; speak.setAttribute('aria-label', 'Speak message');
+    speak.onclick = () => speakResponse(findMessageText(wrapper));
+    actions.appendChild(speak);
+  } else {
+    const edit = document.createElement('button');
+    edit.type = 'button'; edit.textContent = '✎'; edit.title = 'Edit'; edit.setAttribute('aria-label', 'Edit message');
+    edit.onclick = () => { byId('userInput').value = findMessageText(wrapper); autoResize(); byId('userInput').focus(); };
+    actions.appendChild(edit);
+  }
+  const menuButton = document.createElement('button');
+  menuButton.type = 'button'; menuButton.textContent = '⋯'; menuButton.title = 'Message menu'; menuButton.setAttribute('aria-label', 'Message menu');
+  const menu = document.createElement('div');
+  menu.className = 'message-menu'; menu.hidden = true;
+  const retry = document.createElement('button');
+  retry.type = 'button'; retry.textContent = 'Retry';
+  retry.onclick = () => {
+    menu.hidden = true;
+    const previous = wrapper.previousElementSibling;
+    const query = role === 'bot' ? findMessageText(previous) : findMessageText(wrapper);
+    if (query) streamMessage(query);
+  };
+  menu.appendChild(retry);
+  menuButton.onclick = (event) => { event.stopPropagation(); menu.hidden = !menu.hidden; };
+  actions.append(menuButton, menu);
+  wrapper.appendChild(actions);
+}
+
+async function loadCanonicalConfig() {
+  const editor = byId('configEditor');
+  try {
+    const response = await fetch('/local-ai.config');
+    if (!response.ok) throw new Error('Config not available');
+    editor.value = await response.text();
+    byId('configStatus').textContent = 'Loaded local-ai.config';
+  } catch (error) {
+    editor.value = '# local-ai.config\nMODE=balanced\nVOICE_ENABLED=true\nPERSONA_MODULE=persona.ryo_persona\nSERVER_PORT=5000\n';
+    byId('configStatus').textContent = 'Loaded fallback configuration.';
+  }
+}
+
 function autoResize() {
   const input = byId('userInput');
   input.style.height = 'auto';
   input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
 }
 
+function setAvatarImage(element, name) {
+  if (!element || !personaAvatar) return;
+  element.replaceChildren();
+  const image = document.createElement('img');
+  image.src = personaAvatar;
+  image.alt = `${name} avatar`;
+  image.onerror = () => {
+    element.textContent = name.slice(0, 2).toUpperCase();
+  };
+  element.appendChild(image);
+}
+
+function syncPersonaAvatars(name) {
+  setAvatarImage(byId('brandAvatar'), name);
+  setAvatarImage(byId('panelAvatar'), name);
+  setAvatarImage(byId('welcomeAvatar'), name);
+  document.querySelectorAll('.message.bot .message-avatar').forEach((avatar) => setAvatarImage(avatar, name));
+}
+
 function appendMessage(text, role) {
+  removeWelcome();
   const wrapper = document.createElement('div');
   wrapper.className = `message ${role}`;
   const avatar = document.createElement('div');
@@ -98,6 +239,7 @@ function appendMessage(text, role) {
   else setMessageContent(body, text);
   if (role === 'user') wrapper.append(body, avatar);
   else wrapper.append(avatar, body);
+  addMessageActions(wrapper, role);
   byId('chatContainer').appendChild(wrapper);
   byId('chatBox').scrollTop = byId('chatBox').scrollHeight;
   return body;
@@ -118,7 +260,7 @@ function renderConversation(conversation) {
     }
   });
   if (!conversation.messages?.length) {
-    appendMessage('System initialized and running locally. Ask for code, Linux help, or hardware control.', 'bot');
+    renderWelcome();
   }
   chatHistory = chatHistory.filter((pair) => pair[0] && pair[1]).slice(-3);
 }
@@ -225,6 +367,7 @@ async function newChat() {
 }
 
 async function speakResponse(text) {
+  if (!speakResponsesEnabled || !text) return;
   try {
     const response = await fetch('/api/tts', {
       method: 'POST',
@@ -243,18 +386,28 @@ async function speakResponse(text) {
 async function streamMessage(query) {
   if (isGenerating) return;
   isGenerating = true;
+  generationController = new AbortController();
   byId('userInput').disabled = true;
-  byId('sendButton').disabled = true;
+  byId('sendButton').disabled = false;
+  byId('sendButton').textContent = '■';
+  byId('sendButton').setAttribute('aria-label', 'Stop generating');
+  byId('sendButton').classList.add('streaming');
   byId('voiceButton').disabled = true;
-  appendMessage(query, 'user');
+  removeWelcome();
+  const fullQuery = attachedText ? `${query}\n\nAttached file context:\n${attachedText}` : query;
+  attachedText = '';
+  byId('attachmentChip').hidden = true;
+  appendMessage(fullQuery, 'user');
   const botMessage = appendMessage('', 'bot');
   setMessageContent(botMessage, '', true);
+  appendStreamingCursor(botMessage);
 
   try {
     const response = await fetch('/api/robot', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, history: chatHistory, conversation_id: conversationId })
+      body: JSON.stringify({ query: fullQuery, history: chatHistory, conversation_id: conversationId, mode: byId('modeSelect').value }),
+      signal: generationController.signal
     });
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -268,7 +421,10 @@ async function streamMessage(query) {
       for (const line of parts) {
         if (!line.startsWith('data: ')) continue;
         const payload = JSON.parse(line.slice(6));
-        if (payload.delta) setMessageContent(botMessage, `${botMessage.dataset.text || ''}${payload.delta}`, true);
+        if (payload.delta) {
+          setMessageContent(botMessage, `${botMessage.dataset.text || ''}${payload.delta}`, true);
+          appendStreamingCursor(botMessage);
+        }
         if (payload.history) chatHistory = payload.history;
         if (payload.conversation_id) conversationId = payload.conversation_id;
         if (payload.response !== undefined) {
@@ -278,16 +434,36 @@ async function streamMessage(query) {
       }
     }
   } catch (error) {
-    setMessageContent(botMessage, 'Error communicating with local AI backend.');
-    console.error(error);
+    if (error.name !== 'AbortError') {
+      setMessageContent(botMessage, 'Error communicating with local AI backend.');
+      console.error(error);
+    } else {
+      botMessage.closest('.message')?.remove();
+    }
   } finally {
     isGenerating = false;
+    generationController = null;
     byId('userInput').disabled = false;
-    byId('sendButton').disabled = false;
+    byId('sendButton').textContent = '➜';
+    byId('sendButton').setAttribute('aria-label', 'Send');
+    byId('sendButton').classList.remove('streaming');
     byId('voiceButton').disabled = false;
     byId('userInput').focus();
     await refreshConversationList();
   }
+}
+
+function stopGeneration() {
+  generationController?.abort();
+}
+
+async function attachTextFile(file) {
+  if (!file) return;
+  if (file.size > 65536) return alert('Text attachments must be 64 KB or smaller.');
+  attachedText = await file.text();
+  const chip = byId('attachmentChip');
+  chip.textContent = `${file.name} ×`;
+  chip.hidden = false;
 }
 
 async function toggleVoice() {
@@ -327,13 +503,40 @@ async function toggleVoice() {
 
 document.addEventListener('DOMContentLoaded', async () => {
   byId('sidebarToggle').onclick = () => {
-    if (innerWidth <= 760) byId('sidebar').classList.remove('mobile-open');
-    else byId('sidebar').classList.toggle('collapsed');
+    if (innerWidth <= 760) {
+      byId('sidebar').classList.remove('mobile-open');
+      byId('sidebarBackdrop').classList.remove('visible');
+    } else {
+      byId('sidebar').classList.toggle('collapsed');
+    }
   };
-  byId('mobileMenu').onclick = () => byId('sidebar').classList.toggle('mobile-open');
+  byId('mobileMenu').onclick = () => {
+    byId('sidebar').classList.add('mobile-open');
+    byId('sidebarBackdrop').classList.add('visible');
+  };
+  byId('sidebarBackdrop').onclick = () => {
+    byId('sidebar').classList.remove('mobile-open');
+    byId('sidebarBackdrop').classList.remove('visible');
+  };
   byId('newChatButton').onclick = newChat;
+  byId('railNewChat').onclick = newChat;
+  const railToolDropdown = byId('railToolDropdown');
+  byId('railTools').onclick = () => {
+    if (!byId('sidebar').classList.contains('collapsed')) {
+      openToolPanel('memoryPanel');
+      return;
+    }
+    railToolDropdown.hidden = !railToolDropdown.hidden;
+  };
+  byId('railToolDropdown').querySelectorAll('[data-panel]').forEach((button) => {
+    button.onclick = () => {
+      railToolDropdown.hidden = true;
+      openToolPanel(button.dataset.panel);
+    };
+  });
   byId('messageForm').onsubmit = (event) => {
     event.preventDefault();
+    if (isGenerating) return stopGeneration();
     const input = byId('userInput');
     const query = input.value.trim();
     if (query) {
@@ -350,8 +553,97 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
   byId('voiceButton').onclick = toggleVoice;
+  bindWelcomePrompts();
+  byId('sendButton').onclick = (event) => { if (isGenerating) { event.preventDefault(); stopGeneration(); } };
+  byId('attachButton').onclick = () => byId('attachmentInput').click();
+  byId('attachmentInput').onchange = (event) => attachTextFile(event.target.files?.[0]);
+  byId('attachmentChip').onclick = () => { attachedText = ''; byId('attachmentChip').hidden = true; };
+  byId('toolsButton').onclick = () => {
+    const panel = byId('toolsPanel');
+    panel.hidden = !panel.hidden;
+    byId('toolsButton').setAttribute('aria-expanded', String(!panel.hidden));
+  };
+  byId('settingsButton').onclick = () => {
+    openToolPanel('settingsPanel');
+    byId('settingsAccountSection').hidden = false;
+    byId('settingsConfigSection').hidden = true;
+    document.querySelectorAll('[data-settings-tab]').forEach((tab) => tab.classList.toggle('active', tab.dataset.settingsTab === 'account'));
+  };
+  document.querySelectorAll('.tool-entry').forEach((button) => { button.onclick = () => openToolPanel(button.dataset.panel); });
+  document.querySelectorAll('.panel-close').forEach((button) => { button.onclick = closeToolPanels; });
+  byId('toolPanelBackdrop').onclick = closeToolPanels;
+  byId('saveMemoryButton').onclick = () => {
+    const note = byId('memoryNote').value.trim();
+    if (!note) return;
+    const notes = JSON.parse(localStorage.getItem('local-assistant-memory') || '[]');
+    notes.push({ note, createdAt: new Date().toISOString() });
+    localStorage.setItem('local-assistant-memory', JSON.stringify(notes.slice(-50)));
+    byId('memoryNote').value = '';
+    byId('memoryNoteStatus').textContent = 'Memory note saved locally.';
+  };
+  document.querySelectorAll('[data-hardware-action]').forEach((button) => {
+    button.onclick = () => { byId('hardwareStatus').textContent = `${button.textContent} queued for ESP32 integration.`; };
+  });
+  byId('speakToggle').onchange = (event) => { speakResponsesEnabled = event.target.checked; };
+  byId('clearChatButton').onclick = () => { byId('toolsPanel').hidden = true; newChat(); };
+  byId('settingsConfigSection').hidden = true;
+  document.querySelectorAll('[data-settings-tab]').forEach((tab) => {
+    tab.onclick = () => {
+      const target = tab.dataset.settingsTab;
+      document.querySelectorAll('[data-settings-tab]').forEach((item) => item.classList.toggle('active', item === tab));
+      byId('settingsAccountSection').hidden = target !== 'account';
+      byId('settingsConfigSection').hidden = target !== 'configuration';
+      if (target === 'configuration' && !byId('configEditor').value.trim()) {
+        loadCanonicalConfig();
+      }
+    };
+  });
+
+  byId('assetImportButton').onclick = () => {
+    byId('assetImportInput').click();
+  };
+
+  byId('assetImportInput').onchange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const body = new FormData();
+    body.append('file', file);
+    try {
+      byId('assetImportStatus').textContent = `Importing ${file.name}...`;
+      const response = await fetch('/api/assets/upload', {
+        method: 'POST',
+        body
+      });
+      if (!response.ok) throw new Error('Asset upload failed');
+      const data = await response.json();
+      byId('assetImportStatus').textContent = `Imported ${file.name} to ${data.path || 'assets'}`;
+    } catch (error) {
+      byId('assetImportStatus').textContent = 'Import failed';
+    }
+  };
+
+  byId('saveConfigButton').onclick = () => {
+    const text = byId('configEditor').value || '';
+    byId('configStatus').textContent = 'local-ai.config saved locally.';
+    try {
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'local-ai.config';
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      URL.revokeObjectURL(url);
+      anchor.remove();
+    } catch (error) {
+      byId('configStatus').textContent = 'Configuration editor updated locally.';
+    }
+  };
+  await loadCanonicalConfig();
   document.addEventListener('click', () => {
     document.querySelectorAll('.conversation-options-menu').forEach((menu) => { menu.hidden = true; });
+    document.querySelectorAll('.message-menu').forEach((menu) => { menu.hidden = true; });
   });
 
   try {
@@ -361,17 +653,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     personaAvatar = data.persona_avatar || '';
     byId('brandName').textContent = name;
     byId('headerPersonaName').textContent = name;
-    [byId('brandAvatar'), byId('panelAvatar')].forEach((avatar) => {
-      if (!personaAvatar) return;
-      avatar.textContent = '';
-      const image = document.createElement('img');
-      image.src = personaAvatar;
-      image.alt = `${name} avatar`;
-      avatar.appendChild(image);
-    });
+    syncPersonaAvatars(name);
     byId('statusLabel').textContent = data.status;
     byId('headerPersonaStatus').textContent = data.status;
     byId('runtimeMode').textContent = `Mode: ${data.mode}`;
+    if ([...byId('modeSelect').options].some((option) => option.value === data.mode)) byId('modeSelect').value = data.mode;
     byId('runtimeHardware').textContent = data.raspberry_pi ? 'Raspberry Pi' : 'Local host';
     byId('runtimeLatency').textContent = data.metrics?.average_latency_ms ? `${Math.round(data.metrics.average_latency_ms)} ms avg` : 'No requests';
     if (!data.voice_enabled || !data.voice_configured) byId('voiceButton').disabled = true;

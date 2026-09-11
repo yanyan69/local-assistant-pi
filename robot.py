@@ -626,14 +626,24 @@ def process_robot_request(
             f"sources={[source['filename'] for source in retrieval_trace['sources']]}"
         )
 
+    # Keep the prompt itself small when generation is already constrained for power saving.
+    prompt_history = client_history
+    prompt_memory_summary = memory_summary
+    prompt_retrieved_data = retrieved_data
+    prompt_system_context = approved_system_context
+    if data.get("power_saving_mode"):
+        prompt_history = client_history[-1:]
+        prompt_memory_summary = memory_summary[:400]
+        prompt_retrieved_data = retrieved_data[:900]
+
     # PROMPT EXECUTION
     formatted_prompt = build_llama3_prompt(
         system_instructions,
-        retrieved_data,
-        client_history,
+        prompt_retrieved_data,
+        prompt_history,
         user_query,
-        memory_summary,
-        approved_system_context,
+        prompt_memory_summary,
+        prompt_system_context,
     )
 
     if data.get("power_saving_mode"):
