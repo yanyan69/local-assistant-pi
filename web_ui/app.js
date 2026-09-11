@@ -3,6 +3,7 @@ let chatHistory = [];
 let isGenerating = false;
 let mediaRecorder = null;
 let voiceChunks = [];
+let personaAvatar = '';
 
 const byId = (id) => document.getElementById(id);
 
@@ -66,7 +67,14 @@ function appendMessage(text, role) {
   wrapper.className = `message ${role}`;
   const avatar = document.createElement('div');
   avatar.className = 'message-avatar';
-  avatar.textContent = role === 'user' ? 'U' : (byId('headerPersonaName').textContent || 'AI').slice(0, 2).toUpperCase();
+  if (role === 'user' || !personaAvatar) {
+    avatar.textContent = role === 'user' ? 'U' : (byId('headerPersonaName').textContent || 'AI').slice(0, 2).toUpperCase();
+  } else {
+    const image = document.createElement('img');
+    image.src = personaAvatar;
+    image.alt = '';
+    avatar.appendChild(image);
+  }
   const body = document.createElement('div');
   body.className = 'message-body';
   if (role === 'user') body.textContent = text;
@@ -102,20 +110,63 @@ function renderConversationList(conversations) {
   const list = byId('conversationList');
   list.replaceChildren();
   conversations.forEach((conversation) => {
+    const item = document.createElement('div');
+    item.className = `conversation-item${conversation.id === conversationId ? ' active' : ''}`;
     const button = document.createElement('button');
-    button.className = `conversation-item${conversation.id === conversationId ? ' active' : ''}`;
+    button.className = 'conversation-title';
     button.textContent = conversation.title || 'New chat';
+    button.type = 'button';
     button.onclick = () => openConversation(conversation.id);
-    list.appendChild(button);
+    const rename = document.createElement('button');
+    rename.className = 'conversation-action';
+    rename.type = 'button';
+    rename.textContent = 'Rename';
+    rename.title = 'Rename chat';
+    rename.onclick = () => renameConversation(conversation);
+    const remove = document.createElement('button');
+    remove.className = 'conversation-action delete';
+    remove.type = 'button';
+    remove.textContent = 'Delete';
+    remove.title = 'Delete chat';
+    remove.onclick = () => deleteConversation(conversation);
+    item.append(button, rename, remove);
+    list.appendChild(item);
   });
 }
 
 async function refreshConversationList() {
   const response = await fetch('/api/conversations');
+  if (!response.ok) throw new Error('Could not load chat history.');
   const data = await response.json();
   const conversations = data.conversations || [];
   renderConversationList(conversations);
   return conversations;
+}
+
+async function renameConversation(conversation) {
+  const title = window.prompt('Chat name', conversation.title || 'New chat')?.trim();
+  if (!title || title === conversation.title) return;
+  const response = await fetch(`/api/conversations/${encodeURIComponent(conversation.id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title })
+  });
+  if (!response.ok) return alert('Could not rename this chat.');
+  await refreshConversationList();
+}
+
+async function deleteConversation(conversation) {
+  if (!window.confirm(`Delete "${conversation.title || 'New chat'}"?`)) return;
+  const response = await fetch(`/api/conversations/${encodeURIComponent(conversation.id)}`, { method: 'DELETE' });
+  if (!response.ok) return alert('Could not delete this chat.');
+  if (conversation.id === conversationId) {
+    conversationId = null;
+    const conversations = await refreshConversationList();
+    if (conversations.length) await openConversation(conversations[0].id);
+    else await newChat();
+  } else {
+    await refreshConversationList();
+  }
 }
 
 async function openConversation(id) {
@@ -274,8 +325,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const response = await fetch('/api/status');
     const data = await response.json();
     const name = data.persona_name || 'Local Assistant';
+    personaAvatar = data.persona_avatar || '';
     byId('brandName').textContent = name;
     byId('headerPersonaName').textContent = name;
+    [byId('brandAvatar'), byId('panelAvatar')].forEach((avatar) => {
+      if (!personaAvatar) return;
+      avatar.textContent = '';
+      const image = document.createElement('img');
+      image.src = personaAvatar;
+      image.alt = `${name} avatar`;
+      avatar.appendChild(image);
+    });
     byId('statusLabel').textContent = data.status;
     byId('headerPersonaStatus').textContent = data.status;
     byId('runtimeMode').textContent = `Mode: ${data.mode}`;
@@ -286,7 +346,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error(error);
   }
 
-  const conversations = await refreshConversationList();
-  if (conversations.length) await openConversation(conversations[0].id);
-  else await newChat();
+  try {
+    const conversations = await refreshConversationList();
+    if (conversations.length) await openConversation(conversations[0].id);
+    else await newChat();
+  } catch (error) {
+    console.error(error);
+    byId('conversationList').textContent = 'Chat history unavailable.';
+  }
 });

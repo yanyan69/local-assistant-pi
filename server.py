@@ -14,7 +14,7 @@ import queue
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager, contextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -414,6 +414,23 @@ async def get_conversation_endpoint(conversation_id: str):
     if not conversation:
         return {"status": "error", "message": "Conversation not found."}
     return conversation
+
+
+@app.patch("/api/conversations/{conversation_id}")
+async def rename_conversation_endpoint(conversation_id: str, request: Request):
+    data = await request.json()
+    title = data.get("title", "") if isinstance(data, dict) else ""
+    conversation = conversation_store.rename(conversation_id, title)
+    if not conversation:
+        raise HTTPException(status_code=400, detail="A non-empty title is required.")
+    return conversation
+
+
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation_endpoint(conversation_id: str):
+    if not conversation_store.delete(conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+    return {"status": "ok", "conversation_id": conversation_id}
 
 
 @app.get("/api/tools")

@@ -72,6 +72,28 @@ class ConversationStore:
         self._write(conversation)
         return conversation
 
+    def rename(self, conversation_id: str, title: str) -> Optional[Dict]:
+        conversation = self.get(conversation_id)
+        title = str(title or "").strip()[:80]
+        if not conversation or not title:
+            return None
+        conversation["title"] = title
+        conversation["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self._write(conversation)
+        return conversation
+
+    def delete(self, conversation_id: str) -> bool:
+        try:
+            path = self._path(conversation_id)
+        except ValueError:
+            return False
+        with self._lock:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                return False
+        return True
+
     def _write(self, conversation: Dict) -> None:
         path = self._path(conversation["id"])
         temporary_path = path.with_suffix(".json.tmp")

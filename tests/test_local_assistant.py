@@ -7,6 +7,7 @@ from core.app_config import build_runtime_config
 from core.local_commands import detect_local_command_query
 from core.local_memory import LocalMemoryStore
 from core.tools import execute_tool
+from core.conversations import ConversationStore
 from robot import process_robot_request
 from core.system_context import read_system_context
 from robot import build_llama3_prompt, clean_model_response, clean_search_query
@@ -14,6 +15,17 @@ from utilities.offline_catalogs import close_catalog_connections, connect, query
 
 
 class LocalAssistantConfigurationTests(unittest.TestCase):
+    def test_conversation_can_be_renamed_and_deleted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = ConversationStore(directory)
+            conversation = store.create("Original title")
+            renamed = store.rename(conversation["id"], "Renamed title")
+            self.assertEqual(renamed["title"], "Renamed title")
+            self.assertEqual(store.get(conversation["id"])["title"], "Renamed title")
+            self.assertTrue(store.delete(conversation["id"]))
+            self.assertIsNone(store.get(conversation["id"]))
+            self.assertFalse(store.delete(conversation["id"]))
+
     def test_catalog_query_quotes_fts_terms_with_punctuation(self):
         with tempfile.TemporaryDirectory() as directory:
             db_path = Path(directory) / "catalog.db"
