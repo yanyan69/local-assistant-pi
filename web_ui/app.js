@@ -313,12 +313,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
   byId('mobileMenu').onclick = () => byId('sidebar').classList.toggle('mobile-open');
   byId('newChatButton').onclick = newChat;
-  byId('historyToggle').onclick = () => {
-    const list = byId('conversationList');
-    const open = list.hidden;
-    list.hidden = !open;
-    byId('historyToggle').setAttribute('aria-expanded', String(open));
-  };
   byId('messageForm').onsubmit = (event) => {
     event.preventDefault();
     const input = byId('userInput');

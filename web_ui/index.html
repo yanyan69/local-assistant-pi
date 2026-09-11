@@ -4,17 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Local Assistant</title>
-  <link rel="stylesheet" href="/web_ui/styles.css?v=27f41b4">
+  <link rel="stylesheet" href="/web_ui/styles.css?v=history-menu-2">
 </head>
 <body>
   <div class="app" id="app">
     <aside class="sidebar" id="sidebar">
       <div class="brand"><div class="avatar" id="brandAvatar">AI</div><div><strong id="brandName">Local Assistant</strong><small id="statusLabel">Starting</small></div><button class="icon-button sidebar-toggle" id="sidebarToggle" aria-label="Collapse sidebar">☰</button></div>
       <button class="new-chat" id="newChatButton">＋ <span>New chat</span></button>
-      <div class="history-menu">
-        <button class="history-toggle" id="historyToggle" aria-expanded="false">Chat history <span>⌄</span></button>
-        <div class="conversation-list" id="conversationList" hidden></div>
-      </div>
+      <details class="history-menu" id="historyMenu">
+        <summary class="history-toggle">Chat history <span class="history-chevron">⌄</span></summary>
+        <div class="conversation-list" id="conversationList"></div>
+      </details>
       <div class="sidebar-spacer"></div>
       <div class="system-info"><span id="runtimeMode">Loading...</span><span id="runtimeHardware">Local host</span><span id="runtimeLatency">No requests</span></div>
     </aside>
@@ -24,6 +24,6 @@
       <form class="input-container" id="messageForm"><textarea id="userInput" rows="1" placeholder="Message the assistant..."></textarea><button class="voice-button" id="voiceButton" type="button" aria-label="Speak">🎙</button><button class="send-button" id="sendButton" type="submit" aria-label="Send">➜</button></form>
     </main>
   </div>
-  <script src="/web_ui/app.js?v=27f41b4"></script>
+  <script src="/web_ui/app.js?v=history-menu-2"></script>
 </body>
 </html>

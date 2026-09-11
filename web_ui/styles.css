@@ -24,7 +24,10 @@ body { overflow: hidden; }
 .sidebar.collapsed .brand > *:not(.sidebar-toggle) { display: none; }
 .new-chat { padding: 11px; border-radius: 9px; text-align: left; font-weight: 600; }
 .history-menu { position: relative; }
-.history-toggle { width: 100%; padding: 11px; border-radius: 9px; text-align: left; display: flex; justify-content: space-between; }
+.history-toggle { list-style: none; width: 100%; padding: 11px; border: 1px solid var(--border); border-radius: 9px; text-align: left; display: flex; justify-content: space-between; cursor: pointer; }
+.history-toggle::-webkit-details-marker { display: none; }
+.history-menu[open] .history-chevron { transform: rotate(180deg); }
+.history-chevron { transition: transform .15s ease; }
 .conversation-list { display: grid; gap: 4px; max-height: 260px; overflow: auto; margin-top: 5px; }
 .conversation-item { position: relative; display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 8px; color: var(--muted); }
 .conversation-title { min-width: 0; flex: 1; padding: 6px; border: 0; background: transparent; color: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
