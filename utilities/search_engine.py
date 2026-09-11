@@ -66,7 +66,6 @@ class OfflineSearchEngine:
                     ORDER BY score ASC
                     LIMIT ?
                 """
-                params = (fts_query, category, category, top_k) if category else (fts_query, top_k)
                 rows = []
                 for fts_query in search_queries:
                     cursor.execute(sql, (fts_query, category, category, top_k) if category else (fts_query, top_k))

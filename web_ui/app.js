@@ -4,6 +4,7 @@ let isGenerating = false;
 let mediaRecorder = null;
 let voiceChunks = [];
 let personaAvatar = '';
+let conversationLoadSequence = 0;
 
 const byId = (id) => document.getElementById(id);
 
@@ -204,9 +205,11 @@ async function deleteConversation(conversation) {
 
 async function openConversation(id) {
   if (isGenerating) return;
+  const loadSequence = ++conversationLoadSequence;
   const response = await fetch(`/api/conversations/${encodeURIComponent(id)}`);
-  if (response.ok) renderConversation(await response.json());
-  await refreshConversationList();
+  if (!response.ok || loadSequence !== conversationLoadSequence) return;
+  renderConversation(await response.json());
+  if (loadSequence === conversationLoadSequence) await refreshConversationList();
 }
 
 async function newChat() {

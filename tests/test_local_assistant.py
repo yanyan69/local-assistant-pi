@@ -12,9 +12,14 @@ from robot import process_robot_request
 from core.system_context import read_system_context
 from robot import build_llama3_prompt, clean_model_response, clean_search_query
 from utilities.offline_catalogs import close_catalog_connections, connect, query_catalog, upsert_document
+from utilities.search_engine import OfflineSearchEngine
 
 
 class LocalAssistantConfigurationTests(unittest.TestCase):
+    def test_search_engine_query_does_not_reference_unassigned_fts_query(self):
+        result = OfflineSearchEngine().query("code simple code")
+        self.assertNotIn("cannot access local variable 'fts_match_query'", result)
+
     def test_conversation_can_be_renamed_and_deleted(self):
         with tempfile.TemporaryDirectory() as directory:
             store = ConversationStore(directory)
