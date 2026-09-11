@@ -92,18 +92,19 @@ body { overflow: hidden; }
 .runtime-strip span { white-space: nowrap; }
 .mobile-menu { display: none; width: 36px; height: 36px; border-radius: 8px; }
 .chat-box { flex: 1; overflow: auto; padding: 24px; }
-.chat-container { max-width: 860px; margin: auto; display: grid; gap: 18px; }
-.message { display: flex; gap: 10px; align-items: flex-start; }
-.message { animation: message-in .32s cubic-bezier(.22,.61,.36,1) both; }
-.message.user { justify-content: flex-end; }
+.chat-container { max-width: 860px; margin: auto; display: flex; flex-direction: column; gap: 16px; }
+.message { display: flex; gap: 10px; align-items: flex-start; max-width: min(78%, 700px); animation: message-in .32s cubic-bezier(.22,.61,.36,1) both; }
+.message.bot { align-self: flex-start; }
+.message.user { align-self: flex-end; justify-content: flex-end; max-width: min(78%, 700px); }
 .message.user .message-avatar { order: 2; background: linear-gradient(135deg,#ffb989,#ff7fa8); }
-.message-body { max-width: min(78%,700px); padding: 13px 15px; border: 1px solid rgba(218,226,231,.08); border-radius: 12px; background: #202427; line-height: 1.5; white-space: pre-wrap; }
-.message.user .message-body { background: linear-gradient(135deg,#71363d,#a94d58); border-color: rgba(240,157,163,.2); }
+.message-body { min-width: 0; padding: 13px 15px; border: 1px solid rgba(218,226,231,.08); border-radius: 18px 18px 18px 5px; background: #202427; line-height: 1.5; white-space: pre-wrap; color: var(--text); box-shadow: 0 10px 30px rgba(0,0,0,.12); }
+.message.bot .message-body { background: #202427; border-color: rgba(218,226,231,.10); color: var(--text); }
+.message.user .message-body { background: linear-gradient(135deg,#71363d,#a94d58); border-color: rgba(240,157,163,.2); color: #fffaf4; border-radius: 18px 18px 5px 18px; box-shadow: 0 10px 30px rgba(224,108,117,.16); }
+.message.user .message-body { order: 1; }
+.message.user .message-avatar { order: 2; }
 .message-actions { display: flex; align-items: center; gap: 2px; margin: 3px 0 0 0; opacity: 0; transform: translateY(-3px); transition: opacity .16s ease, transform .16s ease; }
 .message.bot .message-actions { order: 2; }
 .message.user .message-actions { order: 0; margin: 3px 0 0 0; }
-.message.user .message-body { order: 1; }
-.message.user .message-avatar { order: 2; }
 .message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; transform: translateY(0); }
 .message-actions > button { width: 27px; height: 27px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; }
 .message-actions > button:hover { color: var(--text); background: rgba(255,255,255,.08); }
