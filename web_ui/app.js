@@ -22,7 +22,7 @@ function renderMarkdown(text) {
 
   safe = safe.replace(/```([\w+-]*)\n?([\s\S]*?)(?:```|$)/g, (_match, language, code) => {
     const index = codeBlocks.length;
-    codeBlocks.push(`<pre class="code-block"><code>${code.trim()}</code></pre>`);
+    codeBlocks.push('<div class="code-block-wrap"><button class="copy-code-button" type="button" aria-label="Copy code" title="Copy code">⧉</button><pre class="code-block"><code>' + code.trim() + '</code></pre></div>');
     return `@@CODE_BLOCK_${index}@@`;
   });
 
@@ -54,6 +54,22 @@ function renderMarkdown(text) {
 function setMessageContent(element, text, streaming = false) {
   element.dataset.text = text || '';
   element.innerHTML = renderMarkdown(text) + (streaming ? '<span class="cursor"></span>' : '');
+  element.querySelectorAll('.copy-code-button').forEach((button) => {
+    button.onclick = async () => {
+      const code = button.parentElement.querySelector('code')?.textContent || '';
+      try {
+        await navigator.clipboard.writeText(code);
+        button.textContent = '✓';
+        button.title = 'Copied';
+        setTimeout(() => {
+          button.textContent = '⧉';
+          button.title = 'Copy code';
+        }, 1200);
+      } catch (error) {
+        button.title = 'Copy failed';
+      }
+    };
+  });
 }
 
 function autoResize() {
@@ -161,7 +177,7 @@ async function refreshConversationList() {
 }
 
 async function renameConversation(conversation) {
-  const title = window.prompt('Chat name', conversation.title || 'New chat')?.trim();
+  const title = window.prompt('Chat name (maximum 40 characters)', conversation.title || 'New chat')?.trim().slice(0, 40);
   if (!title || title === conversation.title) return;
   const response = await fetch(`/api/conversations/${encodeURIComponent(conversation.id)}`, {
     method: 'PATCH',

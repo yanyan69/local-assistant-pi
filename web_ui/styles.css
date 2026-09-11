@@ -26,10 +26,9 @@ body { overflow: hidden; }
 .history-menu { position: relative; }
 .history-toggle { list-style: none; width: 100%; padding: 11px; border: 1px solid var(--border); border-radius: 9px; text-align: left; display: flex; justify-content: space-between; cursor: pointer; }
 .history-toggle::-webkit-details-marker { display: none; }
-.history-menu[open] .history-chevron { transform: rotate(180deg); }
-.history-chevron { transition: transform .15s ease; }
-.conversation-list { display: grid; gap: 4px; max-height: 260px; overflow: auto; margin-top: 5px; }
-.conversation-item { position: relative; display: flex; align-items: center; gap: 4px; padding: 3px; border-radius: 8px; color: var(--muted); }
+.history-chevron { width: 8px; height: 8px; margin: 1px 3px 4px 0; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+.conversation-list { display: grid; gap: 4px; max-height: 260px; overflow-y: auto; overflow-x: hidden; margin-top: 5px; }
+.conversation-item { position: relative; display: flex; align-items: center; gap: 4px; min-width: 0; width: 100%; padding: 3px; border-radius: 8px; color: var(--muted); }
 .conversation-title { min-width: 0; flex: 1; padding: 6px; border: 0; background: transparent; color: inherit; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 .conversation-options { width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
 .conversation-options:hover { color: var(--text); background: rgba(255,255,255,.08); }
@@ -53,7 +52,10 @@ body { overflow: hidden; }
 .message-body h1, .message-body h2, .message-body h3 { margin: 0 0 8px; }
 .message-body ul, .message-body ol { margin: 8px 0 8px 20px; padding: 0; }
 .message-body code { padding: 2px 5px; border-radius: 4px; background: #0d1117; color: #d8e2ff; font-family: ui-monospace, monospace; font-size: .92em; }
-.message-body .code-block { margin: 10px 0; overflow: auto; padding: 12px; border-radius: 8px; background: #0d1117; white-space: pre; }
+.message-body .code-block-wrap { position: relative; min-width: 0; }
+.message-body .code-block { margin: 10px 0; overflow: auto; padding: 12px 42px 12px 12px; border-radius: 8px; background: #0d1117; white-space: pre; }
+.copy-code-button { position: absolute; z-index: 1; top: 7px; right: 7px; width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 6px; background: #202735; color: var(--muted); cursor: pointer; }
+.copy-code-button:hover { color: var(--text); background: #2b3548; }
 .message-body .code-block code { padding: 0; background: transparent; }
 .cursor { display: inline-block; width: 7px; height: 14px; margin-left: 4px; background: var(--accent); vertical-align: middle; animation: blink .8s infinite; }
 @keyframes blink { 50% { opacity: 0; } }

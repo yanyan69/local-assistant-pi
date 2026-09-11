@@ -27,7 +27,7 @@ class ConversationStore:
         now = datetime.now(timezone.utc).isoformat()
         conversation = {
             "id": uuid.uuid4().hex,
-            "title": (title or "New chat").strip()[:80] or "New chat",
+            "title": (title or "New chat").strip()[:40] or "New chat",
             "created_at": now,
             "updated_at": now,
             "messages": [],
@@ -67,14 +67,14 @@ class ConversationStore:
             "created_at": now,
         })
         if role == "user" and conversation.get("title") == "New chat":
-            conversation["title"] = str(content).strip()[:80]
+            conversation["title"] = str(content).strip()[:40]
         conversation["updated_at"] = now
         self._write(conversation)
         return conversation
 
     def rename(self, conversation_id: str, title: str) -> Optional[Dict]:
         conversation = self.get(conversation_id)
-        title = str(title or "").strip()[:80]
+        title = str(title or "").strip()[:40]
         if not conversation or not title:
             return None
         conversation["title"] = title
