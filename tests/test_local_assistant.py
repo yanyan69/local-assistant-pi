@@ -10,9 +10,32 @@ from core.tools import execute_tool
 from robot import process_robot_request
 from core.system_context import read_system_context
 from robot import build_llama3_prompt, clean_model_response, clean_search_query
+from utilities.offline_catalogs import close_catalog_connections, connect, query_catalog, upsert_document
 
 
 class LocalAssistantConfigurationTests(unittest.TestCase):
+    def test_catalog_query_quotes_fts_terms_with_punctuation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = Path(directory) / "catalog.db"
+            connection = connect(db_path)
+            try:
+                upsert_document(
+                    connection,
+                    "raspberry_pi",
+                    "USB storage",
+                    "Safely eject a mounted USB drive with umount before unplugging it.",
+                    "local://raspberry-pi/usb",
+                )
+                connection.commit()
+                result = query_catalog(
+                    "how to eject safely a usb in a raspberry pi? what command should i use?",
+                    db_path=db_path,
+                )
+                self.assertIn("Safely eject", result)
+            finally:
+                connection.close()
+                close_catalog_connections()
+
     def test_settings_persist_and_force_proactive_interval_to_sixty_seconds(self):
         with tempfile.TemporaryDirectory() as directory:
             original_path = app_config.SETTINGS_PATH

@@ -422,6 +422,7 @@ def query_catalog(query: str, top_k: int = 4, db_path: Path = None, category: st
     terms = [term for term in query.lower().split() if len(term) > 2]
     if not terms:
         return ""
+    fts_query = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms)
     if db_path:
         paths = [db_path]
     elif category and topic_database_path(category).exists():
@@ -435,7 +436,7 @@ def query_catalog(query: str, top_k: int = 4, db_path: Path = None, category: st
         connection = _read_connection(path)
         rows.extend(connection.execute(
             "SELECT title, domain, content, source_url FROM documents_fts WHERE documents_fts MATCH ? ORDER BY bm25(documents_fts) LIMIT ?",
-            (" OR ".join(terms), top_k),
+            (fts_query, top_k),
         ).fetchall())
     rows = rows[:top_k]
     return "\n\n---\n\n".join(
