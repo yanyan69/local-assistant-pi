@@ -349,7 +349,7 @@ app.mount("/web_ui", StaticFiles(directory="web_ui"), name="web_ui")
 # --- ROUTES ---
 @app.get("/", response_class=HTMLResponse)
 async def render_browser_interface():
-    return HTMLResponse(content=get_chat_html())
+    return HTMLResponse(content=get_chat_html(), headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/status")

@@ -117,19 +117,36 @@ function renderConversationList(conversations) {
     button.textContent = conversation.title || 'New chat';
     button.type = 'button';
     button.onclick = () => openConversation(conversation.id);
+    const options = document.createElement('button');
+    options.className = 'conversation-options';
+    options.type = 'button';
+    options.textContent = '⋯';
+    options.title = 'Chat options';
+    options.setAttribute('aria-label', `Options for ${conversation.title || 'New chat'}`);
+    const menu = document.createElement('div');
+    menu.className = 'conversation-options-menu';
+    menu.hidden = true;
     const rename = document.createElement('button');
-    rename.className = 'conversation-action';
     rename.type = 'button';
     rename.textContent = 'Rename';
-    rename.title = 'Rename chat';
-    rename.onclick = () => renameConversation(conversation);
+    rename.onclick = () => {
+      menu.hidden = true;
+      renameConversation(conversation);
+    };
     const remove = document.createElement('button');
-    remove.className = 'conversation-action delete';
     remove.type = 'button';
+    remove.className = 'delete';
     remove.textContent = 'Delete';
-    remove.title = 'Delete chat';
-    remove.onclick = () => deleteConversation(conversation);
-    item.append(button, rename, remove);
+    remove.onclick = () => {
+      menu.hidden = true;
+      deleteConversation(conversation);
+    };
+    menu.append(rename, remove);
+    options.onclick = (event) => {
+      event.stopPropagation();
+      menu.hidden = !menu.hidden;
+    };
+    item.append(button, options, menu);
     list.appendChild(item);
   });
 }
@@ -320,6 +337,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
   byId('voiceButton').onclick = toggleVoice;
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.conversation-options-menu').forEach((menu) => { menu.hidden = true; });
+  });
 
   try {
     const response = await fetch('/api/status');
