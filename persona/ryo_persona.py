@@ -1,4 +1,4 @@
-ROBOT_NAME = "Ryo Yamada"
+ROBOT_NAME = "Ryo"
 PERSONA_AVATAR = "/assets/avatars/assistant_placeholder.svg"
 
 SYSTEM_PROMPTS = {
