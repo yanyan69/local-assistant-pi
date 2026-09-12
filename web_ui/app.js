@@ -569,6 +569,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     byId('settingsConfigSection').hidden = true;
     document.querySelectorAll('[data-settings-tab]').forEach((tab) => tab.classList.toggle('active', tab.dataset.settingsTab === 'account'));
   };
+  const memoryTabs = Array.from(document.querySelectorAll('[data-memory-tab]'));
+  const memoryPanels = {
+    history: byId('memoryHistoryPanel'),
+    memory: byId('memoryMemoryPanel'),
+    knowledge: byId('memoryKnowledgePanel'),
+  };
+  memoryTabs.forEach((tab) => {
+    tab.onclick = () => {
+      const target = tab.dataset.memoryTab;
+      memoryTabs.forEach((item) => item.classList.toggle('active', item === tab));
+      Object.entries(memoryPanels).forEach(([key, panel]) => {
+        panel.hidden = key !== target;
+      });
+    };
+  });
+
   document.querySelectorAll('.tool-entry').forEach((button) => { button.onclick = () => openToolPanel(button.dataset.panel); });
   document.querySelectorAll('.panel-close').forEach((button) => { button.onclick = closeToolPanels; });
   byId('toolPanelBackdrop').onclick = closeToolPanels;
@@ -580,6 +596,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     localStorage.setItem('local-assistant-memory', JSON.stringify(notes.slice(-50)));
     byId('memoryNote').value = '';
     byId('memoryNoteStatus').textContent = 'Memory note saved locally.';
+  };
+
+  byId('memoryKnowledgeImportButton').onclick = () => {
+    byId('memoryKnowledgeFileInput')?.click();
+  };
+
+  byId('memoryKnowledgeFileInput').onchange = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    const body = new FormData();
+    files.forEach((file) => body.append('files', file));
+    byId('memoryKnowledgeStatus').textContent = 'Importing files into configured knowledge directory...';
+    try {
+      const response = await fetch('/api/knowledge/import', { method: 'POST', body });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || data.message || 'Knowledge import failed');
+      byId('memoryKnowledgeStatus').textContent = `Imported ${data.imported.length} file(s) into ${data.knowledge_dir || 'knowledge dir'}.`;
+    } catch (error) {
+      byId('memoryKnowledgeStatus').textContent = error.message || 'Knowledge import failed.';
+    }
+  };
+
+  byId('memoryKnowledgeDigestButton').onclick = async () => {
+    byId('memoryKnowledgeStatus').textContent = 'Digesting configured knowledge directory...';
+    try {
+      const response = await fetch('/api/knowledge/digest', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Knowledge digest failed');
+      byId('memoryKnowledgeStatus').textContent = `Knowledge digest complete: ${data.db_path || 'updated database'}.`;
+    } catch (error) {
+      byId('memoryKnowledgeStatus').textContent = error.message || 'Knowledge digest failed.';
+    }
+  };
+
+  byId('memoryKnowledgeRebuildButton').onclick = async () => {
+    byId('memoryKnowledgeStatus').textContent = 'Reindexing configured knowledge directory...';
+    try {
+      const response = await fetch('/api/knowledge/reindex', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Knowledge reindex failed');
+      byId('memoryKnowledgeStatus').textContent = `Knowledge reindex complete: ${data.db_path || 'updated database'}.`;
+    } catch (error) {
+      byId('memoryKnowledgeStatus').textContent = error.message || 'Knowledge reindex failed.';
+    }
   };
   document.querySelectorAll('[data-hardware-action]').forEach((button) => {
     button.onclick = () => { byId('hardwareStatus').textContent = `${button.textContent} queued for ESP32 integration.`; };
@@ -622,22 +682,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
-  byId('saveConfigButton').onclick = () => {
+  byId('saveConfigButton').onclick = async () => {
     const text = byId('configEditor').value || '';
-    byId('configStatus').textContent = 'local-ai.config saved locally.';
+    byId('configStatus').textContent = 'Saving local-ai.config...';
     try {
-      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = 'local-ai.config';
-      anchor.style.display = 'none';
-      document.body.appendChild(anchor);
-      anchor.click();
-      URL.revokeObjectURL(url);
-      anchor.remove();
+      const response = await fetch('/api/config/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: text,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || 'Configuration save failed');
+      byId('configStatus').textContent = `local-ai.config saved to ${data.path || 'project config'}.`;
     } catch (error) {
-      byId('configStatus').textContent = 'Configuration editor updated locally.';
+      byId('configStatus').textContent = error.message || 'Configuration editor updated locally.';
     }
   };
   await loadCanonicalConfig();
@@ -655,11 +713,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     byId('headerPersonaName').textContent = name;
     syncPersonaAvatars(name);
     byId('statusLabel').textContent = data.status;
+    if (byId('memoryKnowledgePath')) {
+      byId('memoryKnowledgePath').textContent = data.knowledge_dir || 'configured knowledge dir';
+    }
     byId('headerPersonaStatus').textContent = data.status;
-    byId('runtimeMode').textContent = `Mode: ${data.mode}`;
     if ([...byId('modeSelect').options].some((option) => option.value === data.mode)) byId('modeSelect').value = data.mode;
-    byId('runtimeHardware').textContent = data.raspberry_pi ? 'Raspberry Pi' : 'Local host';
-    byId('runtimeLatency').textContent = data.metrics?.average_latency_ms ? `${Math.round(data.metrics.average_latency_ms)} ms avg` : 'No requests';
     if (!data.voice_enabled || !data.voice_configured) byId('voiceButton').disabled = true;
   } catch (error) {
     console.error(error);

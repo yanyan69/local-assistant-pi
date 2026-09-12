@@ -24,6 +24,11 @@ DEFAULT_ALLOWLIST: List[str] = [
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
+def get_project_local_ai_config_path() -> Path:
+    """Return the canonical local-ai.config that the server and UI should edit."""
+    return PROJECT_ROOT / "local-ai.config"
+
+
 def _config_candidates() -> List[Path]:
     candidates = []
     explicit = os.getenv("LOCAL_ASSISTANT_CONFIG")

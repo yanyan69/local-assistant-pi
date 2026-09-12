@@ -8,6 +8,7 @@ from core.local_commands import detect_local_command_query
 from core.local_memory import LocalMemoryStore
 from core.tools import execute_tool
 from core.conversations import ConversationStore
+from hardware.esp32_s3_client import Esp32S3Client
 from robot import process_robot_request
 from core.system_context import read_system_context
 from robot import build_llama3_prompt, clean_model_response, clean_search_query
@@ -16,6 +17,12 @@ from utilities.search_engine import OfflineSearchEngine
 
 
 class LocalAssistantConfigurationTests(unittest.TestCase):
+    def test_project_local_ai_config_path_resolves_to_workspace_file(self):
+        path = app_config.get_project_local_ai_config_path()
+        self.assertTrue(str(path).endswith("local-ai.config"))
+        self.assertEqual(path.name, "local-ai.config")
+        self.assertTrue(path.parent.name.endswith("local-assistant-pi"))
+
     def test_search_engine_query_does_not_reference_unassigned_fts_query(self):
         result = OfflineSearchEngine().query("code simple code")
         self.assertNotIn("cannot access local variable 'fts_match_query'", result)
@@ -91,6 +98,18 @@ class LocalAssistantConfigurationTests(unittest.TestCase):
         query = clean_search_query("more commands using cp in linux")
         self.assertIn("cp", query.split())
         self.assertIn("linux", query.split())
+
+    def test_esp32_s3_client_builds_a_device_message_and_has_a_local_http_fallback(self):
+        client = Esp32S3Client(device_id="esp32s3sense", transport_url="")
+        msg = client.build_command("CAPTURE_IMAGE", payload={}, request_id="req-01")
+        self.assertEqual(msg["type"], "CAPTURE_IMAGE")
+        self.assertEqual(msg["device"], "esp32s3sense")
+        self.assertEqual(msg["payload"], {})
+        self.assertEqual(msg["id"], "req-01")
+
+        fallback = client.dispatch("CAPTURE_IMAGE", payload={"camera": "sense"}, request_id="req-02")
+        self.assertIn("CAPTURE_IMAGE", fallback)
+        self.assertIn("esp32s3sense", fallback)
 
     def test_debug_retrieval_trace_exposes_search_context_and_sources(self):
         def retrieval_llm(*args, **kwargs):

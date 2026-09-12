@@ -11,6 +11,7 @@ import time
 import threading
 import socket
 import queue
+from pathlib import Path
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager, contextmanager
 
@@ -30,6 +31,7 @@ from core.app_config import (
     JELLYFIN_TOKEN,
     JELLYFIN_URL,
     JELLYFIN_ENABLED,
+    KNOWLEDGE_BASE_DIR,
     KNOWLEDGE_DB_PATH,
     MEDIA_DIR,
     MODEL_PATH as CONFIG_MODEL_PATH,
@@ -38,6 +40,7 @@ from core.app_config import (
     TTS_ENABLED,
     build_runtime_config,
     config_value,
+    get_project_local_ai_config_path,
     load_settings,
 )
 from utilities.offline_catalogs import query_catalog
@@ -353,7 +356,76 @@ os.makedirs(ASSETS_DIR, exist_ok=True)
 
 @app.get("/local-ai.config")
 async def config_file():
-    return FileResponse(os.path.join(PROJECT_ROOT, "local-ai.config"))
+    return FileResponse(get_project_local_ai_config_path())
+
+
+@app.post("/api/config/save")
+async def save_config(request: Request):
+    try:
+        payload = await request.body()
+        text = payload.decode("utf-8") if payload else ""
+        config_path = get_project_local_ai_config_path()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(text, encoding="utf-8")
+        return JSONResponse({"status": "ok", "path": str(config_path)})
+    except Exception as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=500)
+
+
+@app.post("/api/knowledge/import")
+async def import_knowledge_file(files: list[UploadFile] = File(default=None)):
+    safe_root = Path(KNOWLEDGE_BASE_DIR).resolve()
+    safe_root.mkdir(parents=True, exist_ok=True)
+    imported = []
+    for file in files or []:
+        filename = file.filename or "uploaded_knowledge.txt"
+        safe_name = Path(filename).name
+        candidate = (safe_root / safe_name).resolve()
+        if safe_root not in candidate.parents and candidate != safe_root:
+            raise HTTPException(status_code=400, detail="Invalid knowledge file path.")
+        content = await file.read()
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        candidate.write_bytes(content)
+        imported.append(str(candidate.relative_to(safe_root)))
+    return JSONResponse({"status": "ok", "knowledge_dir": str(safe_root), "imported": imported})
+
+
+@app.post("/api/knowledge/digest")
+async def digest_knowledge():
+    try:
+        from utilities.ingest_dev_docs import prepare_directories, populate_sqlite_database
+
+        def run_digest():
+            prepare_directories()
+            populate_sqlite_database()
+
+        await asyncio.to_thread(run_digest)
+        return JSONResponse({
+            "status": "ok",
+            "knowledge_dir": str(KNOWLEDGE_BASE_DIR),
+            "db_path": str(KNOWLEDGE_DB_PATH),
+        })
+    except Exception as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=500)
+
+
+@app.post("/api/knowledge/reindex")
+async def reindex_knowledge():
+    try:
+        from utilities.reindex_knowledge import main
+
+        def run_reindex():
+            return main()
+
+        await asyncio.to_thread(run_reindex)
+        return JSONResponse({
+            "status": "ok",
+            "knowledge_dir": str(KNOWLEDGE_BASE_DIR),
+            "db_path": str(KNOWLEDGE_DB_PATH),
+        })
+    except Exception as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=500)
+
 
 @app.post("/api/assets/upload")
 async def upload_asset(file: UploadFile = File(...)):
@@ -392,6 +464,7 @@ async def status_endpoint():
         "voice_enabled": VOICE_ENABLED,
         "voice_configured": bool(get_voice_transcriber() and get_voice_transcriber().configured),
         "media_directory": str(MEDIA_DIR),
+        "knowledge_dir": str(KNOWLEDGE_BASE_DIR),
         "threads": RUNTIME_CONFIG["n_threads"],
         "context": RUNTIME_CONFIG["n_ctx"],
         "persona_name": ROBOT_NAME,

@@ -10,6 +10,11 @@ if str(PROJECT_ROOT) not in sys.path:
 from utilities.ingest_dev_docs import prepare_directories, populate_sqlite_database
 
 
-if __name__ == "__main__":
+def main():
     prepare_directories()
     populate_sqlite_database()
+    return str(Path(__file__).resolve().parent.parent / "data" / "knowledge_base.db")
+
+
+if __name__ == "__main__":
+    main()
