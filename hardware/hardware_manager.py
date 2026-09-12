@@ -1,6 +1,7 @@
 from .media_player import MusicPlayer
 from .jellyfin_client import JellyfinClient
 from .esp32_s3_client import Esp32S3Client
+from core.app_config import ESP32_HTTP_URL, ESP32_SERIAL_PORT, ESP32_SERIAL_BAUD
 
 
 class HardwareManager:
@@ -11,7 +12,9 @@ class HardwareManager:
         # the project importable while allowing the Pi to act as the hub.
         self.esp32_client = Esp32S3Client(
             device_id="esp32s3sense",
-            transport_url="",
+            transport_url=ESP32_HTTP_URL,
+            serial_port=ESP32_SERIAL_PORT,
+            serial_baud=ESP32_SERIAL_BAUD,
         )
 
     def execute_command(self, cmd: str, args: str = "") -> str:

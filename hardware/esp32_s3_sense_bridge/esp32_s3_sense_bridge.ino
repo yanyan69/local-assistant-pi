@@ -15,8 +15,8 @@
 //   - Compile in Arduino IDE using an ESP32-S3 board definition.
 // ------------------------------------------------------------
 
-const char* WIFI_SSID = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+const char* WIFI_SSID = "yanyan-laptop";
+const char* WIFI_PASSWORD = "12345678";
 const char* DEVICE_ID = "esp32s3sense";
 
 WebServer server(8080);
@@ -88,82 +88,69 @@ void handleStatus() {
   sendJson(200, reply);
 }
 
-void handleCommand() {
-  String body = server.arg("plain");
+String processCommand(String body) {
   String type = jsonType(body);
   String device = jsonDevice(body);
   String id = jsonId(body);
   String payload = jsonPayload(body);
 
   if (type.length() == 0) {
-    String reply = "{\"device\":\"" + String(DEVICE_ID) +
-                   "\",\"status\":\"error\",\"message\":\"missing type\"}";
-    sendJson(400, reply);
-    return;
+    return "{\"device\":\"" + String(DEVICE_ID) +
+           "\",\"status\":\"error\",\"message\":\"missing type\"}";
   }
 
   logEvent("command_received", type + " device=" + device + " id=" + id);
 
   if (device.length() > 0 && device != DEVICE_ID) {
-    String reply = "{\"device\":\"" + String(DEVICE_ID) +
-                   "\",\"status\":\"error\",\"message\":\"device mismatch\"}";
-    sendJson(409, reply);
-    return;
+    return "{\"device\":\"" + String(DEVICE_ID) +
+           "\",\"status\":\"error\",\"message\":\"device mismatch\"}";
   }
 
-  // Allowlisted action surface for the Xiao ESP32-S3 Sense.
   if (type == "CAPTURE_IMAGE") {
     logEvent("capture_requested", payload);
-    // TODO Replace with esp_camera capture routine when the ESP32-S3 Sense
-    // camera object is connected in your laptop's Arduino IDE project.
-    String reply = "{\"device\":\"" + String(DEVICE_ID) +
-                   "\",\"type\":\"CAPTURE_IMAGE\",\"status\":\"accepted\",\"id\":\"" + id +
-                   "\",\"payload\":\"image_staged\"}";
-    sendJson(200, reply);
-    return;
+    return "{\"device\":\"" + String(DEVICE_ID) +
+           "\",\"type\":\"CAPTURE_IMAGE\",\"status\":\"accepted\",\"id\":\"" + id +
+           "\",\"payload\":\"image_staged\"}";
   }
 
   if (type == "DISPLAY_TEXT") {
     logEvent("display_text", safeJsonString(payload));
-    String reply = "{\"device\":\"" + String(DEVICE_ID) +
-                   "\",\"type\":\"DISPLAY_TEXT\",\"status\":\"accepted\",\"id\":\"" + id +
-                   "\"}";
-    sendJson(200, reply);
-    return;
+    return "{\"device\":\"" + String(DEVICE_ID) +
+           "\",\"type\":\"DISPLAY_TEXT\",\"status\":\"accepted\",\"id\":\"" + id +
+           "\"}";
   }
 
   if (type == "LED_ON") {
     digitalWrite(LED_BUILTIN, HIGH);
     logEvent("led_on", "");
-    String reply = "{\"device\":\"" + String(DEVICE_ID) +
-                   "\",\"type\":\"LED_ON\",\"status\":\"accepted\",\"id\":\"" + id +
-                   "\"}";
-    sendJson(200, reply);
-    return;
+    return "{\"device\":\"" + String(DEVICE_ID) +
+           "\",\"type\":\"LED_ON\",\"status\":\"accepted\",\"id\":\"" + id +
+           "\"}";
   }
 
   if (type == "LED_OFF") {
     digitalWrite(LED_BUILTIN, LOW);
     logEvent("led_off", "");
-    String reply = "{\"device\":\"" + String(DEVICE_ID) +
-                   "\",\"type\":\"LED_OFF\",\"status\":\"accepted\",\"id\":\"" + id +
-                   "\"}";
-    sendJson(200, reply);
-    return;
+    return "{\"device\":\"" + String(DEVICE_ID) +
+           "\",\"type\":\"LED_OFF\",\"status\":\"accepted\",\"id\":\"" + id +
+           "\"}";
   }
 
   if (type == "DEVICE_STATUS") {
-    String reply = "{\"device\":\"" + String(DEVICE_ID) +
-                   "\",\"type\":\"DEVICE_STATUS\",\"status\":\"online\",\"id\":\"" + id +
-                   "\"}";
-    sendJson(200, reply);
-    return;
+    return "{\"device\":\"" + String(DEVICE_ID) +
+           "\",\"type\":\"DEVICE_STATUS\",\"status\":\"online\",\"id\":\"" + id +
+           "\"}";
   }
 
-  String reply = "{\"device\":\"" + String(DEVICE_ID) +
-                 "\",\"status\":\"error\",\"message\":\"unsupported type\",\"id\":\"" + id +
-                 "\"}";
-  sendJson(400, reply);
+  return "{\"device\":\"" + String(DEVICE_ID) +
+         "\",\"status\":\"error\",\"message\":\"unsupported type\",\"id\":\"" + id +
+         "\"}";
+}
+
+void handleCommand() {
+  String body = server.arg("plain");
+  String reply = processCommand(body);
+  sendJson(200, reply);
 }
 
 void setup() {
@@ -205,6 +192,20 @@ void setup() {
   Serial.println("[ESP32_S3] HTTP bridge ready on port 8080");
 }
 
+void processSerialLine(String line) {
+  line.trim();
+  if (line.length() == 0) return;
+
+  logEvent("serial_command", line);
+  String reply = processCommand(line);
+  Serial.println("[ESP32_S3_ACK] " + reply);
+}
+
 void loop() {
   server.handleClient();
+
+  if (Serial.available()) {
+    String line = Serial.readStringUntil('\n');
+    processSerialLine(line);
+  }
 }

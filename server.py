@@ -372,6 +372,30 @@ async def save_config(request: Request):
         return JSONResponse({"status": "error", "message": str(exc)}, status_code=500)
 
 
+@app.post("/api/esp32/test")
+async def esp32_serial_test(request: Request):
+    """Simple local debug handshake that sends one ESP32 command envelope to the configured transport.
+
+    Example request body:
+        {"type": "DEVICE_STATUS", "payload": {}, "id": "debug-1"}
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({"status": "error", "message": "expected JSON payload"}, status_code=400)
+
+    command_type = str(data.get("type") or data.get("command") or "DEVICE_STATUS").upper().strip()
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    request_id = str(data.get("id") or f"esp32-debug-{int(time.time() * 1000)}")
+
+    try:
+        # Request the same command shape the ESP32 client understands.
+        result = await asyncio.to_thread(hw_manager.esp32_client.dispatch, command_type, payload, request_id)
+        return JSONResponse({"status": "ok", "transport_result": result})
+    except Exception as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=500)
+
+
 @app.post("/api/knowledge/import")
 async def import_knowledge_file(files: list[UploadFile] = File(default=None)):
     safe_root = Path(KNOWLEDGE_BASE_DIR).resolve()
